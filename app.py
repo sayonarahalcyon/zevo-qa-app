@@ -47,8 +47,8 @@ if preset_cols[2].button("This mo.", use_container_width=True):
 ss.setdefault("start_date", date.today() - timedelta(days=7))
 ss.setdefault("end_date", date.today())
 
-start_date = st.sidebar.date_input("From", value=ss["start_date"], key="start_date")
-end_date = st.sidebar.date_input("To", value=ss["end_date"], key="end_date")
+start_date = st.sidebar.date_input("From", key="start_date")
+end_date = st.sidebar.date_input("To", key="end_date")
 st.sidebar.caption("Only **closed** conversations are sampled.")
 
 exclude_fin = st.sidebar.checkbox("Exclude Fin AI-handled tickets", value=True, key="exclude_fin")
