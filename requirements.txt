@@ -1,0 +1,6 @@
+streamlit>=1.38
+supabase>=2.6
+anthropic>=0.34
+requests>=2.31
+pandas>=2.0
+bleach>=6.1
