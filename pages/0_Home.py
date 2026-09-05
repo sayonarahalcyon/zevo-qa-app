@@ -52,7 +52,12 @@ end_date = st.sidebar.date_input("To", key="end_date")
 st.sidebar.caption("Only **closed** conversations are sampled.")
 
 exclude_fin = st.sidebar.checkbox("Exclude Fin AI-handled tickets", value=True, key="exclude_fin")
-agent_filter = st.sidebar.text_input("Agent (name or numeric admin ID)", key="agent_filter")
+
+agent_names = sorted({a["name"] for a in db.list_agents() if a.get("name")})
+agent_filter = st.sidebar.selectbox("Agent", ["All agents"] + agent_names, key="agent_filter")
+if agent_filter == "All agents":
+    agent_filter = ""
+
 skip_reviewed = st.sidebar.checkbox("Skip already-reviewed tickets", value=True, key="skip_reviewed")
 
 agent_roster = {a["name"].lower(): a for a in db.list_agents()}
@@ -71,10 +76,7 @@ def resolve_agent_id(raw: str):
 
 
 def pull_pool():
-    agent_id, ok = resolve_agent_id(agent_filter)
-    if not ok:
-        st.sidebar.error(f'No agent named "{agent_filter}" yet — use their numeric admin ID or clear this field.')
-        return
+    agent_id, _ok = resolve_agent_id(agent_filter)
     if start_date > end_date:
         st.error('Check your dates — "From" is after "To".')
         return
