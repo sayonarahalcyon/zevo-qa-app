@@ -128,11 +128,8 @@ def get_conversation(conversation_id: str) -> dict:
 def list_admins() -> list[dict]:
     """Optional roster helper (the app primarily learns agents organically
     from conversations as they're opened, per the original design)."""
-    try:
-        payload = _request("GET", "/admins")
-        return payload.get("admins", [])
-    except IntercomError:
-        return []
+    payload = _request("GET", "/admins")
+    return payload.get("admins", [])
 
 
 def channel_label(source_type: str | None) -> str:
