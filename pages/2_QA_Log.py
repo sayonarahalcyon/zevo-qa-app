@@ -6,8 +6,8 @@ import pandas as pd
 import streamlit as st
 
 from lib import auth, db
-from lib.constants import CRITICAL_ERRORS, DISPUTE_FORM_URL, RUBRIC, RUBRIC_GUIDE
-from lib.intercom_client import IntercomError, conversation_url, get_conversation
+from lib.constants import CRITICAL_ERRORS, DISPUTE_FORM_URL, RUBRIC, RUBRIC_GUIDE, is_excluded_agent_name
+from lib.intercom_client import IntercomError, conversation_url, get_conversation, list_admins
 from lib.ticket_view import render_ticket
 
 st.set_page_config(page_title="QA Log — Ticket QA Sampler", page_icon="🎫", layout="wide")
@@ -36,6 +36,50 @@ if ss.get("log_open_ticket_id"):
     st.stop()
 
 st.title("QA Log")
+
+# ---------- manage agents ----------
+if auth.is_signed_in():
+    with st.expander("Manage agents"):
+        st.caption(
+            "Agents are normally added automatically the first time one of their tickets is opened. "
+            "Use this only to add someone before that happens, or to bulk-sync the roster from Intercom."
+        )
+
+        if st.button("Sync roster from Intercom", use_container_width=True):
+            try:
+                admins = list_admins()
+            except IntercomError as e:
+                st.error(f"Could not reach Intercom: {e}")
+            else:
+                if not admins:
+                    st.warning("No admins came back from Intercom — check the access token in Secrets.")
+                else:
+                    synced = 0
+                    for a in admins:
+                        aid, name = a.get("id"), (a.get("name") or "").strip()
+                        if aid and name and not is_excluded_agent_name(name):
+                            db.upsert_agent(aid, name, a.get("email", ""))
+                            synced += 1
+                    db.clear_cache()
+                    st.success(f"Synced {synced} agent(s) from Intercom.")
+                    st.rerun()
+
+        st.markdown("**Add one manually**")
+        with st.form("add_agent_form", clear_on_submit=True):
+            new_name = st.text_input("Name")
+            new_id = st.text_input("Intercom admin ID (numeric — find it under Settings → Teammates)")
+            new_email = st.text_input("Email (optional)")
+            submitted = st.form_submit_button("Add agent")
+        if submitted:
+            if not new_name.strip() or not new_id.strip():
+                st.error("Name and Intercom admin ID are both required.")
+            elif not new_id.strip().isdigit():
+                st.error("Intercom admin ID should be numeric.")
+            else:
+                db.upsert_agent(new_id.strip(), new_name.strip(), new_email.strip())
+                db.clear_cache()
+                st.success(f"Added {new_name.strip()}.")
+                st.rerun()
 
 # ---------- dashboard ----------
 total = len(entries)
