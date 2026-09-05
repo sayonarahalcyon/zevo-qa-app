@@ -10,7 +10,7 @@ from lib.ticket_view import render_ticket
 
 st.set_page_config(page_title="Weekly QA Batch — Ticket QA Sampler", page_icon="🎫", layout="wide")
 
-st.sidebar.title("🎫 Ticket QA Sampler")
+st.sidebar.title("🎫 Ticket Selection")
 auth.render_sidebar_auth()
 st.sidebar.divider()
 st.sidebar.subheader("Weekly QA batch")
