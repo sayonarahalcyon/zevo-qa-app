@@ -12,7 +12,7 @@ from lib.ticket_view import render_ticket
 
 st.set_page_config(page_title="QA Log — Ticket QA Sampler", page_icon="🎫", layout="wide")
 
-st.sidebar.title("🎫 Ticket QA Sampler")
+st.sidebar.title("🎫 Ticket Selection")
 auth.render_sidebar_auth()
 
 ss = st.session_state
