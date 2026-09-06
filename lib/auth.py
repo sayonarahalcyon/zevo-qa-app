@@ -55,7 +55,10 @@ def render_sidebar_auth() -> None:
         if st.sidebar.button("Sign in", use_container_width=True):
             if _check_password(name, pw):
                 st.session_state[SESSION_KEY] = name
-                st.rerun()
+                # Reviewers sign in to pull and score tickets, and that tool
+                # lives on Weekly QA Batch (not wherever they happened to sign
+                # in from) — send them straight there instead of just rerunning.
+                st.switch_page("pages/1_Weekly_QA_Batch.py")
             else:
                 st.sidebar.error("Wrong password.")
     st.sidebar.caption(
