@@ -21,44 +21,29 @@ def monday_of(d: date) -> date:
 
 
 ss = st.session_state
-ss.setdefault("batch_week_monday", monday_of(date.today()))
-ss.setdefault("batch_agent_name", "")
+ss.setdefault("batch_week_date", date.today())
 ss.setdefault("batch_open_ticket_id", None)
 
 agent_roster = {a["name"].lower(): a for a in db.list_agents()}
 agent_names = sorted({a["name"] for a in db.list_agents() if a.get("name")})
 
-agent_input = st.sidebar.text_input(
-    "Agent", value=ss["batch_agent_name"], key="batch_agent_input", placeholder="Type an agent name"
-)
-if agent_names:
-    st.sidebar.caption("Known agents: " + ", ".join(agent_names))
+agent_options = ["Select an agent..."] + agent_names
+agent_choice = st.sidebar.selectbox("Agent", agent_options, key="batch_agent_select")
+agent_input = "" if agent_choice == "Select an agent..." else agent_choice
 
-agent_id = None
-agent_ok = True
-if agent_input.strip():
-    if agent_input.strip().isdigit():
-        agent_id = agent_input.strip()
-    else:
-        hit = agent_roster.get(agent_input.strip().lower())
-        if hit:
-            agent_id = hit["id"]
-        else:
-            agent_ok = False
+agent_id = agent_roster.get(agent_input.lower(), {}).get("id") if agent_input else None
 
-if not agent_input.strip():
-    st.sidebar.caption("Pick or type an agent to begin.")
-elif not agent_ok:
-    st.sidebar.error(f'No agent named "{agent_input}" yet — pick a suggestion or use their numeric admin ID.')
+if not agent_input:
+    st.sidebar.caption("Pick an agent to begin.")
 
-ss["batch_agent_name"] = agent_input
-week_monday = ss["batch_week_monday"]
+picked_date = st.sidebar.date_input("Pick a date in the week", key="batch_week_date")
+week_monday = monday_of(picked_date)
 week_sunday = week_monday + timedelta(days=6)
 is_current_week = week_monday == monday_of(date.today())
 
 wc1, wc2, wc3 = st.sidebar.columns([1, 3, 1])
 if wc1.button("‹", key="week_prev"):
-    ss["batch_week_monday"] = week_monday - timedelta(days=7)
+    ss["batch_week_date"] = picked_date - timedelta(days=7)
     st.rerun()
 wc2.markdown(
     f"<div style='text-align:center;font-family:monospace;font-size:12px;padding-top:6px;'>"
@@ -66,7 +51,7 @@ wc2.markdown(
     unsafe_allow_html=True,
 )
 if wc3.button("›", key="week_next", disabled=is_current_week):
-    ss["batch_week_monday"] = week_monday + timedelta(days=7)
+    ss["batch_week_date"] = picked_date + timedelta(days=7)
     st.rerun()
 if is_current_week:
     st.sidebar.caption("📍 Week in progress")
@@ -92,7 +77,7 @@ for i in range(3):
 
 remaining = 3 - len(tickets)
 if not agent_id:
-    pull_label, pull_disabled = "Pick or type an agent", True
+    pull_label, pull_disabled = "Pick an agent", True
 elif remaining <= 0:
     pull_label, pull_disabled = "Quota met (3 of 3)", True
 elif is_current_week:
@@ -153,7 +138,7 @@ if st.sidebar.button(pull_label, type="primary", disabled=pull_disabled, use_con
 # ---------- main stage ----------
 open_id = ss.get("batch_open_ticket_id")
 if not open_id:
-    st.info("Pick or type an agent in the sidebar, then pull this week's QA batch — 3 topic-diverse tickets per agent per week.")
+    st.info("Pick an agent in the sidebar, then pull this week's QA batch — 3 topic-diverse tickets per agent per week.")
 else:
     ticket_url = next((t["url"] for t in tickets if t["id"] == open_id), conversation_url(open_id))
     try:
