@@ -9,6 +9,8 @@ Claude-artifact version of this app:
 Policy Accuracy/Process Compliance/Risk & Safety is unchanged (15/25/35).
 """
 
+import unicodedata
+
 REVIEWER_NAMES = ["Erwin Bagnol", "Weng Yee", "Kristine Lariosa"]
 
 # Names/words that identify a non-frontline reviewer rather than an agent.
@@ -16,6 +18,22 @@ REVIEWER_NAMES = ["Erwin Bagnol", "Weng Yee", "Kristine Lariosa"]
 # something to sample, and they're excluded from the auto-learned agent
 # roster.
 EXCLUDED_AGENT_WORDS = {"kristine", "weng", "erwin"}
+
+# Full Intercom admin display names that are shared inboxes, bots, or
+# non-frontline stakeholders rather than real agents (e.g. a shared support
+# mailbox, or a senior stakeholder whose Intercom account shows a shortened
+# name). Matched as a whole name rather than word-by-word like
+# EXCLUDED_AGENT_WORDS above, since several of these are common first names
+# that would otherwise risk excluding a real agent who happens to share one.
+EXCLUDED_AGENT_NAMES = {
+    "sunny",
+    "taylor",
+    "sam",
+    "zevo customer care",
+    "garron",
+    "damir luketic",
+    "cameron preston",
+}
 
 CONCERN_TYPES = [
     "Extension",
@@ -99,6 +117,16 @@ def compute_result(total: int, critical: dict) -> str:
     return RESULT_FAIL
 
 
+def _normalize_name(name: str) -> str:
+    """Lowercased, whitespace-trimmed, and stripped of accents (so "Luketić"
+    and "Luketic" compare equal) — used for the exact-name exclusion check."""
+    decomposed = unicodedata.normalize("NFKD", name or "")
+    without_accents = "".join(c for c in decomposed if not unicodedata.combining(c))
+    return without_accents.strip().lower()
+
+
 def is_excluded_agent_name(name: str) -> bool:
-    words = (name or "").lower().split()
-    return any(w in EXCLUDED_AGENT_WORDS for w in words)
+    normalized = _normalize_name(name)
+    if normalized in EXCLUDED_AGENT_NAMES:
+        return True
+    return any(w in EXCLUDED_AGENT_WORDS for w in normalized.split())
