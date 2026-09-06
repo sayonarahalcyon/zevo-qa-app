@@ -36,23 +36,29 @@ agent_id = agent_roster.get(agent_input.lower(), {}).get("id") if agent_input el
 if not agent_input:
     st.sidebar.caption("Pick an agent to begin.")
 
+def _shift_week(days: int) -> None:
+    # Runs as an on_click callback, i.e. before the script reruns and before
+    # the date_input widget below is re-instantiated — mutating
+    # st.session_state["batch_week_date"] here is safe. Doing this mutation
+    # in the button's own `if st.button(...):` body instead (after the
+    # date_input widget already exists this run) raises
+    # StreamlitWidgetAlreadyInstantiatedError.
+    ss["batch_week_date"] = ss["batch_week_date"] + timedelta(days=days)
+
+
 picked_date = st.sidebar.date_input("Pick a date in the week", key="batch_week_date")
 week_monday = monday_of(picked_date)
 week_sunday = week_monday + timedelta(days=6)
 is_current_week = week_monday == monday_of(date.today())
 
 wc1, wc2, wc3 = st.sidebar.columns([1, 3, 1])
-if wc1.button("‹", key="week_prev"):
-    ss["batch_week_date"] = picked_date - timedelta(days=7)
-    st.rerun()
+wc1.button("‹", key="week_prev", on_click=_shift_week, args=(-7,))
 wc2.markdown(
     f"<div style='text-align:center;font-family:monospace;font-size:12px;padding-top:6px;'>"
     f"Week of {week_monday.strftime('%b %-d')}–{week_sunday.strftime('%b %-d, %Y')}</div>",
     unsafe_allow_html=True,
 )
-if wc3.button("›", key="week_next", disabled=is_current_week):
-    ss["batch_week_date"] = picked_date + timedelta(days=7)
-    st.rerun()
+wc3.button("›", key="week_next", disabled=is_current_week, on_click=_shift_week, args=(7,))
 if is_current_week:
     st.sidebar.caption("📍 Week in progress")
 
