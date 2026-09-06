@@ -30,36 +30,6 @@ ss.setdefault("used_ids", set())
 ss.setdefault("current_ticket_id", None)
 ss.setdefault("fin_filter_warning", False)
 
-# ---------- sidebar filters ----------
-st.sidebar.subheader("Date Filters")
-
-preset_cols = st.sidebar.columns(3)
-if preset_cols[0].button("7d", use_container_width=True):
-    ss["start_date"] = date.today() - timedelta(days=7)
-    ss["end_date"] = date.today()
-if preset_cols[1].button("30d", use_container_width=True):
-    ss["start_date"] = date.today() - timedelta(days=30)
-    ss["end_date"] = date.today()
-if preset_cols[2].button("This mo.", use_container_width=True):
-    ss["start_date"] = date.today().replace(day=1)
-    ss["end_date"] = date.today()
-
-ss.setdefault("start_date", date.today() - timedelta(days=7))
-ss.setdefault("end_date", date.today())
-
-start_date = st.sidebar.date_input("From", key="start_date")
-end_date = st.sidebar.date_input("To", key="end_date")
-st.sidebar.caption("Only **closed** conversations are sampled.")
-
-exclude_fin = st.sidebar.checkbox("Exclude Fin AI-handled tickets", value=True, key="exclude_fin")
-
-agent_names = sorted({a["name"] for a in db.list_agents() if a.get("name")})
-agent_filter = st.sidebar.selectbox("Agent", ["All agents"] + agent_names, key="agent_filter")
-if agent_filter == "All agents":
-    agent_filter = ""
-
-skip_reviewed = st.sidebar.checkbox("Skip already-reviewed tickets", value=True, key="skip_reviewed")
-
 agent_roster = {a["name"].lower(): a for a in db.list_agents()}
 
 
@@ -121,25 +91,62 @@ def pick_random():
     ss["current_ticket_url"] = pick["url"]
 
 
-if st.sidebar.button("Pull random ticket", type="primary", use_container_width=True):
-    pull_pool()
+# ---------- sidebar filters (reviewers only) ----------
+# Pulling and scoring tickets is a reviewer action, so the whole selection
+# panel stays hidden until someone signs in via the auth widget above —
+# everyone else still gets full read-only access to the QA Log, Weekly QA
+# Batch, and Historical Log pages, just not this pull-a-ticket control.
+if auth.is_signed_in():
+    st.sidebar.subheader("Date Filters")
 
-if ss["pool"]:
-    reviewed_map = db.list_reviewed() if skip_reviewed else {}
-    eligible = len(eligible_pool())
-    msg = f"**{ss['pool_total']:,}** tickets match · sampling from a pool of **{len(ss['pool'])}** (Intercom's 150-per-pull limit)"
-    if skip_reviewed:
-        msg += f", **{eligible}** not yet reviewed"
-    st.sidebar.caption(msg)
+    preset_cols = st.sidebar.columns(3)
+    if preset_cols[0].button("7d", use_container_width=True):
+        ss["start_date"] = date.today() - timedelta(days=7)
+        ss["end_date"] = date.today()
+    if preset_cols[1].button("30d", use_container_width=True):
+        ss["start_date"] = date.today() - timedelta(days=30)
+        ss["end_date"] = date.today()
+    if preset_cols[2].button("This mo.", use_container_width=True):
+        ss["start_date"] = date.today().replace(day=1)
+        ss["end_date"] = date.today()
+
+    ss.setdefault("start_date", date.today() - timedelta(days=7))
+    ss.setdefault("end_date", date.today())
+
+    start_date = st.sidebar.date_input("From", key="start_date")
+    end_date = st.sidebar.date_input("To", key="end_date")
+    st.sidebar.caption("Only **closed** conversations are sampled.")
+
+    exclude_fin = st.sidebar.checkbox("Exclude Fin AI-handled tickets", value=True, key="exclude_fin")
+
+    agent_names = sorted({a["name"] for a in db.list_agents() if a.get("name")})
+    agent_filter = st.sidebar.selectbox("Agent", ["All agents"] + agent_names, key="agent_filter")
+    if agent_filter == "All agents":
+        agent_filter = ""
+
+    skip_reviewed = st.sidebar.checkbox("Skip already-reviewed tickets", value=True, key="skip_reviewed")
+
+    if st.sidebar.button("Pull random ticket", type="primary", use_container_width=True):
+        pull_pool()
+
+    if ss["pool"]:
+        reviewed_map = db.list_reviewed() if skip_reviewed else {}
+        eligible = len(eligible_pool())
+        msg = f"**{ss['pool_total']:,}** tickets match · sampling from a pool of **{len(ss['pool'])}** (Intercom's 150-per-pull limit)"
+        if skip_reviewed:
+            msg += f", **{eligible}** not yet reviewed"
+        st.sidebar.caption(msg)
+    else:
+        st.sidebar.caption("Set a timeframe and pull a ticket to begin.")
+
+    if ss.get("fin_filter_warning"):
+        st.sidebar.warning(
+            "Couldn't filter Fin-handled tickets server-side in this workspace — showing all closed tickets instead. "
+            "Double-check the Fin badge on what you review.",
+            icon="⚠️",
+        )
 else:
-    st.sidebar.caption("Set a timeframe and pull a ticket to begin.")
-
-if ss.get("fin_filter_warning"):
-    st.sidebar.warning(
-        "Couldn't filter Fin-handled tickets server-side in this workspace — showing all closed tickets instead. "
-        "Double-check the Fin badge on what you review.",
-        icon="⚠️",
-    )
+    st.sidebar.caption("Sign in above to set a timeframe and pull a ticket to review.")
 
 st.sidebar.divider()
 st.sidebar.subheader("Recently reviewed")
@@ -150,11 +157,49 @@ if reviewed_rows:
 else:
     st.sidebar.caption("No tickets marked reviewed yet.")
 
+
 # ---------- main stage ----------
+def render_landing() -> None:
+    st.title("🎫 Ticket QA Sampler")
+    st.caption("Sampling and scoring closed Intercom conversations against ZEVO Support's QA rubric.")
+
+    entries = db.list_qa_entries()
+    total = len(entries)
+    if total:
+        score_sum = sum(e.get("total_score") or 0 for e in entries)
+        avg_score = round(score_sum / total, 1)
+        pass_count = sum(1 for e in entries if e.get("result") == "PASS")
+        pass_rate = round(pass_count / total * 100, 1)
+        week_start_iso = (date.today() - timedelta(days=7)).isoformat()
+        this_week = sum(1 for e in entries if (e.get("qa_date") or "") >= week_start_iso)
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Total Audits Logged", total)
+        c2.metric("Pass Rate", f"{pass_rate}%")
+        c3.metric("Avg Score", avg_score)
+        c4.metric("Logged This Week", this_week)
+        st.divider()
+
+    if auth.is_signed_in():
+        st.info("Set a timeframe in the sidebar and click **Pull random ticket** to begin.")
+    else:
+        st.info(
+            "Sign in from the sidebar to pull and score a ticket. Browsing the Weekly QA Batch, "
+            "QA Log, and Historical Log pages doesn't require signing in."
+        )
+
+    st.divider()
+    st.subheader("Jump to")
+    l1, l2, l3 = st.columns(3)
+    l1.page_link("pages/1_Weekly_QA_Batch.py", label="📅 Weekly QA Batch")
+    l2.page_link("pages/2_QA_Log.py", label="📋 QA Log")
+    l3.page_link("pages/3_Historical_Log.py", label="🗄️ Historical Log")
+
+
 ticket_id = ss.get("current_ticket_id")
 
 if not ticket_id:
-    st.info("Set a timeframe in the sidebar and click **Pull random ticket** to begin.")
+    render_landing()
 else:
     try:
         with st.spinner(f"Loading conversation #{ticket_id}…"):
