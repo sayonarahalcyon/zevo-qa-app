@@ -13,16 +13,21 @@ from supabase import create_client, Client
 
 
 @st.cache_resource(show_spinner=False)
+def _create_client() -> Client:
+    """Cached only on success — st.cache_resource doesn't memoize a raised
+    exception, so a transient failure here (e.g. Secrets not fully synced
+    yet during a redeploy) gets retried on the next call instead of being
+    stuck forever as a cached None."""
+    url = st.secrets["supabase"]["url"]
+    key = st.secrets["supabase"]["key"]
+    if not url or not key:
+        raise RuntimeError("Supabase URL/key missing in Secrets.")
+    return create_client(url, key)
+
+
 def get_client() -> Client | None:
     try:
-        url = st.secrets["supabase"]["url"]
-        key = st.secrets["supabase"]["key"]
-    except Exception:
-        return None
-    if not url or not key:
-        return None
-    try:
-        return create_client(url, key)
+        return _create_client()
     except Exception:
         return None
 
