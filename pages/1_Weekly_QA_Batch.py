@@ -1,4 +1,4 @@
-"""Weekly QA batch — pulls 3 topic-diverse tickets per agent per week."""
+"""Weekly QA batch — pulls 3 topic-diverse tickets per agent per custom date range."""
 
 from datetime import date, timedelta
 
@@ -21,7 +21,9 @@ def monday_of(d: date) -> date:
 
 
 ss = st.session_state
-ss.setdefault("batch_week_date", date.today())
+_this_monday = monday_of(date.today())
+ss.setdefault("batch_range_start", _this_monday)
+ss.setdefault("batch_range_end", _this_monday + timedelta(days=6))
 ss.setdefault("batch_open_ticket_id", None)
 
 agent_roster = {a["name"].lower(): a for a in db.list_agents()}
@@ -36,38 +38,34 @@ agent_id = agent_roster.get(agent_input.lower(), {}).get("id") if agent_input el
 if not agent_input:
     st.sidebar.caption("Pick an agent to begin.")
 
-def _shift_week(days: int) -> None:
-    # Runs as an on_click callback, i.e. before the script reruns and before
-    # the date_input widget below is re-instantiated — mutating
-    # st.session_state["batch_week_date"] here is safe. Doing this mutation
-    # in the button's own `if st.button(...):` body instead (after the
-    # date_input widget already exists this run) raises
-    # StreamlitWidgetAlreadyInstantiatedError.
-    ss["batch_week_date"] = ss["batch_week_date"] + timedelta(days=days)
+rc1, rc2 = st.sidebar.columns(2)
+start_date = rc1.date_input("Start date", key="batch_range_start")
+end_date = rc2.date_input("End date", key="batch_range_end")
 
+range_valid = end_date >= start_date
+is_current_period = range_valid and start_date <= date.today() <= end_date
 
-picked_date = st.sidebar.date_input("Pick a date in the week", key="batch_week_date")
-week_monday = monday_of(picked_date)
-week_sunday = week_monday + timedelta(days=6)
-is_current_week = week_monday == monday_of(date.today())
-
-wc1, wc2, wc3 = st.sidebar.columns([1, 3, 1])
-wc1.button("‹", key="week_prev", on_click=_shift_week, args=(-7,))
-wc2.markdown(
-    f"<div style='text-align:center;font-family:monospace;font-size:12px;padding-top:6px;'>"
-    f"Week of {week_monday.strftime('%b %-d')}–{week_sunday.strftime('%b %-d, %Y')}</div>",
-    unsafe_allow_html=True,
-)
-wc3.button("›", key="week_next", disabled=is_current_week, on_click=_shift_week, args=(7,))
-if is_current_week:
-    st.sidebar.caption("📍 Week in progress")
+if not range_valid:
+    st.sidebar.error("End date must be on or after the start date.")
+else:
+    days_in_range = (end_date - start_date).days + 1
+    if is_current_period:
+        st.sidebar.caption(f"📍 {days_in_range}-day range, in progress")
+    elif start_date > date.today():
+        st.sidebar.caption(f"{days_in_range}-day range, starts in the future")
+    else:
+        st.sidebar.caption(f"{days_in_range}-day range, completed")
 
 exclude_fin = st.sidebar.checkbox("Exclude Fin AI-handled tickets", value=True, key="batch_exclude_fin")
 
-picks_row = db.get_weekly_picks(agent_id, week_monday.isoformat()) if agent_id else None
+picks_row = (
+    db.get_weekly_picks(agent_id, start_date.isoformat(), end_date.isoformat())
+    if agent_id and range_valid
+    else None
+)
 tickets = (picks_row or {}).get("tickets") or []
 
-st.sidebar.markdown("**Progress this week**")
+st.sidebar.markdown("**Progress in range**")
 slot_cols = st.sidebar.columns(3)
 for i in range(3):
     with slot_cols[i]:
@@ -82,11 +80,13 @@ for i in range(3):
             st.caption(f"Slot {i+1}\n\n_empty_")
 
 remaining = 3 - len(tickets)
-if not agent_id:
+if not range_valid:
+    pull_label, pull_disabled = "Fix date range", True
+elif not agent_id:
     pull_label, pull_disabled = "Pick an agent", True
 elif remaining <= 0:
     pull_label, pull_disabled = "Quota met (3 of 3)", True
-elif is_current_week:
+elif is_current_period:
     pull_label, pull_disabled = f"Pull today's ticket (#{len(tickets)+1} of 3)", False
 else:
     pull_label, pull_disabled = f"Pick remaining {remaining} ticket{'s' if remaining != 1 else ''}", False
@@ -97,12 +97,12 @@ if st.sidebar.button(pull_label, type="primary", disabled=pull_disabled, use_con
     have_ids = {t["id"] for t in tickets}
     have_topics = [t.get("topic") for t in tickets if t.get("topic")]
     reviewed_map = db.list_reviewed()
-    needed_now = 1 if is_current_week else remaining
-    week_end_effective = min(week_sunday, date.today())
+    needed_now = 1 if is_current_period else remaining
+    range_end_effective = min(end_date, date.today())
 
     with st.spinner("Searching Intercom…"):
         try:
-            results, _total, _fin = search_conversations(week_monday, week_end_effective, exclude_fin, agent_id)
+            results, _total, _fin = search_conversations(start_date, range_end_effective, exclude_fin, agent_id)
         except IntercomError as e:
             batch_status.error(str(e))
             results = None
@@ -116,9 +116,9 @@ if st.sidebar.button(pull_label, type="primary", disabled=pull_disabled, use_con
 
         if not candidates:
             batch_status.info(
-                f"No new closed, unreviewed tickets from {agent_input} yet this week. Check back later."
-                if is_current_week
-                else f"No closed, unreviewed tickets found for {agent_input} in this week."
+                f"No new closed, unreviewed tickets from {agent_input} yet in this range. Check back later."
+                if is_current_period
+                else f"No closed, unreviewed tickets found for {agent_input} in this range."
             )
         else:
             batch_status.info(f"Reading {min(len(candidates), 40)} ticket(s) to find different concerns…")
@@ -135,7 +135,7 @@ if st.sidebar.button(pull_label, type="primary", disabled=pull_disabled, use_con
                 for p in picks
             ]
             merged = (tickets + new_tickets)[:3]
-            db.save_weekly_picks(agent_id, agent_input, week_monday.isoformat(), merged)
+            db.save_weekly_picks(agent_id, agent_input, start_date.isoformat(), end_date.isoformat(), merged)
             batch_status.empty()
             if new_tickets:
                 ss["batch_open_ticket_id"] = new_tickets[0]["id"]
@@ -144,7 +144,7 @@ if st.sidebar.button(pull_label, type="primary", disabled=pull_disabled, use_con
 # ---------- main stage ----------
 open_id = ss.get("batch_open_ticket_id")
 if not open_id:
-    st.info("Pick an agent in the sidebar, then pull this week's QA batch — 3 topic-diverse tickets per agent per week.")
+    st.info("Pick an agent and a date range in the sidebar, then pull this range's QA batch — 3 topic-diverse tickets per agent.")
 else:
     ticket_url = next((t["url"] for t in tickets if t["id"] == open_id), conversation_url(open_id))
     try:
