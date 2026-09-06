@@ -2,10 +2,11 @@
 
 Replaces the Claude artifact's `db` capability (a small NoSQL-style document
 store). Tables mirror the original collections 1:1 — see sql/schema.sql:
-  agents        -- learned frontline-agent directory (id = Intercom admin id)
-  reviewed      -- tickets marked "reviewed" (id = Intercom conversation id)
-  weekly_picks  -- Weekly QA batch state (id = "<agent_id>__<week_start>")
-  qa_entries    -- one row per scored QA audit (id = Intercom conversation id)
+  agents                 -- learned frontline-agent directory (id = Intercom admin id)
+  reviewed                -- tickets marked "reviewed" (id = Intercom conversation id)
+  weekly_picks             -- Weekly QA batch state (id = "<agent_id>__<week_start>")
+  qa_entries               -- one row per scored QA audit (id = Intercom conversation id)
+  historical_qa_entries    -- one-time read-only import from the retired QA Tracker sheet
 """
 
 import streamlit as st
@@ -175,6 +176,24 @@ def save_weekly_picks(agent_id: str, agent_name: str, range_start_iso: str, rang
         ).execute()
     except Exception:
         pass
+
+
+# ---------- historical_qa_entries ----------
+# Read-only: one-time import from the retired "2026 - ZEVO QA Tracker v2"
+# Google Sheet. Nothing in the app writes to this table — it's a reference
+# archive, kept deliberately separate from qa_entries so old sheet rows
+# never mix into the live QA Log's dashboard, pass rate, or per-agent rollup.
+
+@st.cache_data(ttl=300, show_spinner=False)
+def list_historical_entries() -> list[dict]:
+    db = get_client()
+    if not db:
+        return []
+    try:
+        res = db.table("historical_qa_entries").select("*").limit(1000).execute()
+        return res.data or []
+    except Exception:
+        return []
 
 
 def clear_cache() -> None:
