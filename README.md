@@ -9,6 +9,7 @@ Originally built as an in-conversation Claude artifact; this is the standalone S
 - **Quick sample** (`app.py`) — pull a random closed conversation in a date range, optionally filtered by agent, and score it.
 - **Weekly QA Batch** — pulls 3 topic-diverse tickets per agent per week (AI-assisted topic diversity via Anthropic, falls back to random if not configured).
 - **QA Log** — dashboard (totals, pass/coaching/fail, avg score, pass rate), per-agent rollup with weekly quota tracking, a filterable audit log, and the scoring guide.
+- **Historical Log** — read-only archive of evaluations imported from the retired "2026 - ZEVO QA Tracker v2" Google Sheet. Kept separate from the QA Log's live dashboard/rollup so old sheet data never mixes into current metrics.
 
 ## Setup
 
@@ -39,3 +40,4 @@ Originally built as an in-conversation Claude artifact; this is the standalone S
 - Per-agent and dashboard stats are computed live from real data, not the sheet's broken hardcoded `QA Stats` rows.
 - Not rebuilt (considered non-essential/archival): the sheet's monthly archive tabs, its native pivot table, and the `FOR STELLA` change-request log. The `Questions` FAQ log and the QA Audit Dispute Form are kept as static reference content / an external link in the Scoring Guide.
 - The agent roster is learned automatically from Intercom conversations as tickets are opened (Kristine/Weng/Erwin excluded as non-frontline), not the sheet's static `Lists` tab.
+- The sheet's monthly archive tabs *are* now rebuilt, as a one-time import into `historical_qa_entries` (see the Historical Log page) — 116 real evaluations across the main tab and the August archive tab, skipping test/placeholder rows and one tab that turned out to be a duplicate of another. It's read-only reference data; nothing in the app writes to it, and it's excluded from the QA Log's live dashboard and per-agent rollup so it can't skew current numbers.
