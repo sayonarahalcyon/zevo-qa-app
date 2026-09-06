@@ -1,5 +1,10 @@
-"""Weekly QA batch — pulls 3 topic-diverse tickets per agent per custom date range."""
+"""Weekly QA batch — pulls 3 topic-diverse tickets per agent per custom date
+range, plus Quick Sample: a one-off tool to pull a single random ticket in
+any date range. Both live here (below the sign-in widget) since Home is a
+pure landing page and doesn't do any ticket pulling itself.
+"""
 
+import random
 from datetime import date, timedelta
 
 import streamlit as st
@@ -13,6 +18,13 @@ st.set_page_config(page_title="Weekly QA Batch — Ticket QA Sampler", page_icon
 st.sidebar.title("🎫 Ticket Selection")
 auth.render_sidebar_auth()
 st.sidebar.divider()
+
+ss = st.session_state
+
+agent_roster = {a["name"].lower(): a for a in db.list_agents()}
+agent_names = sorted({a["name"] for a in db.list_agents() if a.get("name")})
+
+# ---------- Weekly QA batch ----------
 st.sidebar.subheader("Weekly QA batch")
 
 
@@ -20,14 +32,10 @@ def monday_of(d: date) -> date:
     return d - timedelta(days=d.weekday())
 
 
-ss = st.session_state
 _this_monday = monday_of(date.today())
 ss.setdefault("batch_range_start", _this_monday)
 ss.setdefault("batch_range_end", _this_monday + timedelta(days=6))
 ss.setdefault("batch_open_ticket_id", None)
-
-agent_roster = {a["name"].lower(): a for a in db.list_agents()}
-agent_names = sorted({a["name"] for a in db.list_agents() if a.get("name")})
 
 agent_options = ["Select an agent..."] + agent_names
 agent_choice = st.sidebar.selectbox("Agent", agent_options, key="batch_agent_select")
@@ -74,6 +82,7 @@ for i in range(3):
             state = "✅ Reviewed" if t.get("reviewed") else "Pulled"
             if st.button(t.get("topic") or f"#{t['id']}", key=f"slot_{i}", use_container_width=True):
                 ss["batch_open_ticket_id"] = t["id"]
+                ss["qs_current_ticket_id"] = None
                 st.rerun()
             st.caption(state)
         else:
@@ -139,12 +148,141 @@ if st.sidebar.button(pull_label, type="primary", disabled=pull_disabled, use_con
             batch_status.empty()
             if new_tickets:
                 ss["batch_open_ticket_id"] = new_tickets[0]["id"]
+                ss["qs_current_ticket_id"] = None
             st.rerun()
 
+# ---------- Quick Sample: pull one random ticket, any date range ----------
+st.sidebar.divider()
+with st.sidebar.expander("🎲 Quick Sample — pull one random ticket"):
+    ss.setdefault("qs_pool", [])
+    ss.setdefault("qs_pool_total", 0)
+    ss.setdefault("qs_used_ids", set())
+    ss.setdefault("qs_current_ticket_id", None)
+    ss.setdefault("qs_fin_filter_warning", False)
+
+    def qs_resolve_agent_id(raw: str):
+        raw = (raw or "").strip()
+        if not raw:
+            return None, True
+        if raw.isdigit():
+            return raw, True
+        hit = agent_roster.get(raw.lower())
+        if hit:
+            return hit["id"], True
+        return None, False
+
+    def qs_pull_pool():
+        agent_id2, _ok = qs_resolve_agent_id(qs_agent_filter)
+        if qs_start_date > qs_end_date:
+            st.error('Check your dates — "From" is after "To".')
+            return
+        with st.spinner("Pulling matching tickets from Intercom…"):
+            try:
+                results, total, fin_applied = search_conversations(qs_start_date, qs_end_date, qs_exclude_fin, agent_id2)
+            except IntercomError as e:
+                st.error(f"{e} ")
+                return
+        pool = []
+        for r in results:
+            rid = str(r.get("id", "")).replace("conversation_", "")
+            if not rid:
+                continue
+            pool.append({"raw_id": rid, "title": r.get("title", ""), "text": r.get("source", {}).get("body", "") or r.get("text", ""), "url": r.get("url") or conversation_url(rid)})
+        ss["qs_pool"] = pool
+        ss["qs_pool_total"] = total
+        ss["qs_used_ids"] = set()
+        ss["qs_fin_filter_warning"] = qs_exclude_fin and not fin_applied
+        if pool:
+            qs_pick_random()
+        else:
+            ss["qs_current_ticket_id"] = None
+
+    def qs_eligible_pool():
+        reviewed = db.list_reviewed() if qs_skip_reviewed else {}
+        return [t for t in ss["qs_pool"] if not (qs_skip_reviewed and t["raw_id"] in reviewed)]
+
+    def qs_pick_random():
+        candidates = [t for t in qs_eligible_pool() if t["raw_id"] not in ss["qs_used_ids"]]
+        if not candidates:
+            candidates = qs_eligible_pool()
+            if not candidates:
+                ss["qs_current_ticket_id"] = None
+                return
+            ss["qs_used_ids"] = set()  # exhausted this pass, allow repeats
+        pick = random.choice(candidates)
+        ss["qs_used_ids"].add(pick["raw_id"])
+        ss["qs_current_ticket_id"] = pick["raw_id"]
+        ss["qs_current_ticket_url"] = pick["url"]
+
+    st.caption("A separate one-off tool — pulls a single random closed ticket in any date range, independent of the weekly batch above.")
+
+    qs_preset_cols = st.columns(3)
+    if qs_preset_cols[0].button("7d", use_container_width=True, key="qs_preset_7d"):
+        ss["qs_start_date"] = date.today() - timedelta(days=7)
+        ss["qs_end_date"] = date.today()
+    if qs_preset_cols[1].button("30d", use_container_width=True, key="qs_preset_30d"):
+        ss["qs_start_date"] = date.today() - timedelta(days=30)
+        ss["qs_end_date"] = date.today()
+    if qs_preset_cols[2].button("This mo.", use_container_width=True, key="qs_preset_mo"):
+        ss["qs_start_date"] = date.today().replace(day=1)
+        ss["qs_end_date"] = date.today()
+
+    ss.setdefault("qs_start_date", date.today() - timedelta(days=7))
+    ss.setdefault("qs_end_date", date.today())
+
+    qs_start_date = st.date_input("From", key="qs_start_date")
+    qs_end_date = st.date_input("To", key="qs_end_date")
+    st.caption("Only **closed** conversations are sampled.")
+
+    qs_exclude_fin = st.checkbox("Exclude Fin AI-handled tickets", value=True, key="qs_exclude_fin")
+
+    qs_agent_filter = st.selectbox("Agent", ["All agents"] + agent_names, key="qs_agent_filter")
+    if qs_agent_filter == "All agents":
+        qs_agent_filter = ""
+
+    qs_skip_reviewed = st.checkbox("Skip already-reviewed tickets", value=True, key="qs_skip_reviewed")
+
+    if st.button("Pull random ticket", type="primary", use_container_width=True, key="qs_pull_button"):
+        ss["batch_open_ticket_id"] = None
+        qs_pull_pool()
+
+    if ss["qs_pool"]:
+        eligible = len(qs_eligible_pool())
+        msg = f"**{ss['qs_pool_total']:,}** tickets match · sampling from a pool of **{len(ss['qs_pool'])}** (Intercom's 150-per-pull limit)"
+        if qs_skip_reviewed:
+            msg += f", **{eligible}** not yet reviewed"
+        st.caption(msg)
+    else:
+        st.caption("Set a timeframe and pull a ticket to begin.")
+
+    if ss.get("qs_fin_filter_warning"):
+        st.warning(
+            "Couldn't filter Fin-handled tickets server-side in this workspace — showing all closed tickets instead. "
+            "Double-check the Fin badge on what you review.",
+            icon="⚠️",
+        )
+
 # ---------- main stage ----------
+# Quick Sample takes priority if a ticket is loaded there (it's the more
+# recently-touched of the two tools whenever both have something pulled).
+qs_ticket_id = ss.get("qs_current_ticket_id")
 open_id = ss.get("batch_open_ticket_id")
-if not open_id:
-    st.info("Pick an agent and a date range in the sidebar, then pull this range's QA batch — 3 topic-diverse tickets per agent.")
+
+if qs_ticket_id:
+    try:
+        with st.spinner(f"Loading conversation #{qs_ticket_id}…"):
+            convo = get_conversation(qs_ticket_id)
+    except IntercomError as e:
+        st.error(f"Could not load conversation #{qs_ticket_id}: {e}")
+        convo = None
+    if convo:
+        st.caption(f"Quick Sample pool: {len(ss['qs_pool'])} tickets in this timeframe · {ss['qs_pool_total']:,} total match")
+        render_ticket(convo, ss.get("qs_current_ticket_url") or conversation_url(qs_ticket_id), on_pick_another=qs_pick_random)
+elif not open_id:
+    st.info(
+        "Pick an agent and a date range in the sidebar, then pull this range's QA batch — 3 topic-diverse "
+        "tickets per agent. Or open **Quick Sample** in the sidebar to pull one single random ticket instead."
+    )
 else:
     ticket_url = next((t["url"] for t in tickets if t["id"] == open_id), conversation_url(open_id))
     try:
