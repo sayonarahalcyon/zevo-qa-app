@@ -132,12 +132,16 @@ def list_qa_entries() -> list[dict]:
 
 
 # ---------- weekly_picks ----------
+# "Weekly" picks are now keyed by an arbitrary user-chosen [start, end] date
+# range rather than a fixed calendar week, but the underlying table/column
+# names are unchanged (week_start still holds the range's start date — the
+# range's end date is folded into the id instead of needing a schema change).
 
-def week_doc_id(agent_id: str, week_start_iso: str) -> str:
-    return f"{agent_id}__{week_start_iso}"
+def week_doc_id(agent_id: str, range_start_iso: str, range_end_iso: str) -> str:
+    return f"{agent_id}__{range_start_iso}__{range_end_iso}"
 
 
-def get_weekly_picks(agent_id: str, week_start_iso: str) -> dict | None:
+def get_weekly_picks(agent_id: str, range_start_iso: str, range_end_iso: str) -> dict | None:
     db = get_client()
     if not db:
         return None
@@ -145,7 +149,7 @@ def get_weekly_picks(agent_id: str, week_start_iso: str) -> dict | None:
         res = (
             db.table("weekly_picks")
             .select("*")
-            .eq("id", week_doc_id(agent_id, week_start_iso))
+            .eq("id", week_doc_id(agent_id, range_start_iso, range_end_iso))
             .limit(1)
             .execute()
         )
@@ -155,17 +159,17 @@ def get_weekly_picks(agent_id: str, week_start_iso: str) -> dict | None:
         return None
 
 
-def save_weekly_picks(agent_id: str, agent_name: str, week_start_iso: str, tickets: list) -> None:
+def save_weekly_picks(agent_id: str, agent_name: str, range_start_iso: str, range_end_iso: str, tickets: list) -> None:
     db = get_client()
     if not db:
         return
     try:
         db.table("weekly_picks").upsert(
             {
-                "id": week_doc_id(agent_id, week_start_iso),
+                "id": week_doc_id(agent_id, range_start_iso, range_end_iso),
                 "agent_id": agent_id,
                 "agent_name": agent_name,
-                "week_start": week_start_iso,
+                "week_start": range_start_iso,
                 "tickets": tickets,
             }
         ).execute()
