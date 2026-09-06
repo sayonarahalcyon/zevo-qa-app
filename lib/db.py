@@ -29,16 +29,22 @@ def get_client() -> Client | None:
 
 # ---------- agents ----------
 
-def upsert_agent(agent_id: str, name: str, email: str = "") -> None:
+def upsert_agent(agent_id: str, name: str, email: str = "") -> str | None:
+    """Upserts one agent. Returns None on success, or an error message on
+    failure. Callers that want best-effort behavior (e.g. the organic
+    auto-learn-from-conversation path) can ignore the return value, same as
+    the old .catch(noop) shape; callers that need to tell the user why a
+    save didn't work (e.g. the Manage agents panel) should check it."""
     db = get_client()
     if not db:
-        return
+        return "Database is not connected — check the Supabase URL/key in Secrets."
     try:
         db.table("agents").upsert(
             {"id": str(agent_id), "name": name, "email": email or ""}
         ).execute()
-    except Exception:
-        pass  # best-effort, mirrors the original artifact's .catch(noop)
+        return None
+    except Exception as e:
+        return str(e)
 
 
 @st.cache_data(ttl=30, show_spinner=False)
