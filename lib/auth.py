@@ -37,22 +37,26 @@ def _check_password(name: str, password: str) -> bool:
     return bool(password) and password == expected
 
 
-def render_sidebar_auth() -> None:
-    """Renders the sign-in / sign-out control in the sidebar. Call once per page."""
-    st.sidebar.markdown("**Reviewing as**")
+def render_auth(container) -> None:
+    """Renders the sign-in / sign-out control into any container (st, st.sidebar,
+    a st.container(), or a column) — lets Home place it inline on the page
+    instead of in the sidebar, while every other page still passes st.sidebar.
+    Call once per page.
+    """
+    container.markdown("**Reviewing as**")
     signed_in = current_reviewer()
 
     if signed_in:
-        st.sidebar.success(f"Signed in as {signed_in}")
-        if st.sidebar.button("Sign out", use_container_width=True):
+        container.success(f"Signed in as {signed_in}")
+        if container.button("Sign out", use_container_width=True, key="auth_sign_out"):
             st.session_state.pop(SESSION_KEY, None)
             st.rerun()
         return
 
-    name = st.sidebar.selectbox("Name", [""] + REVIEWER_NAMES, key="auth_name_select")
+    name = container.selectbox("Name", [""] + REVIEWER_NAMES, key="auth_name_select")
     if name:
-        pw = st.sidebar.text_input("Password", type="password", key="auth_pw_input")
-        if st.sidebar.button("Sign in", use_container_width=True):
+        pw = container.text_input("Password", type="password", key="auth_pw_input")
+        if container.button("Sign in", use_container_width=True, key="auth_sign_in"):
             if _check_password(name, pw):
                 st.session_state[SESSION_KEY] = name
                 # Reviewers sign in to pull and score tickets, and that tool
@@ -60,7 +64,12 @@ def render_sidebar_auth() -> None:
                 # in from) — send them straight there instead of just rerunning.
                 st.switch_page("pages/1_Weekly_QA_Batch.py")
             else:
-                st.sidebar.error("Wrong password.")
-    st.sidebar.caption(
+                container.error("Wrong password.")
+    container.caption(
         "Only Erwin, Weng, and Kristine have edit access — everyone else can view the app read-only."
     )
+
+
+def render_sidebar_auth() -> None:
+    """Renders the sign-in / sign-out control in the sidebar. Call once per page."""
+    render_auth(st.sidebar)
