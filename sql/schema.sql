@@ -45,6 +45,9 @@ create table if not exists qa_entries (
     critical_error_status  text,
     qa_reviewer            text not null,
     qa_date                date not null,
+    is_test                boolean not null default false,  -- flagged via the "Mark as test audit" checkbox;
+                                                              -- excluded from the QA Log's dashboard totals and
+                                                              -- per-agent rollup, but still visible in the audit log
     created_at             timestamptz not null default now(),
     updated_at             timestamptz not null default now()
 );
