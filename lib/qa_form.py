@@ -10,7 +10,7 @@ from datetime import date, datetime
 
 import streamlit as st
 
-from lib import auth, db
+from lib import auth, db, sheets_backup
 from lib.constants import (
     CONCERN_TYPES,
     CRITICAL_ERRORS,
@@ -46,6 +46,7 @@ def _render_summary(ticket_id: str, qa: dict, editing_key: str) -> None:
     cols[1].markdown(f"**{qa.get('total_score', '—')} / 100**")
     cols[2].caption(
         f"{qa.get('agent_name', '')} · reviewed by {qa.get('qa_reviewer', '—')} · {qa.get('qa_date', '')}"
+        + (" · 🧪 TEST" if qa.get("is_test") else "")
     )
     if auth.is_signed_in():
         if cols[3].button("Edit score", key=f"edit_{ticket_id}"):
@@ -167,6 +168,13 @@ def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, edi
         st.caption("Only Erwin, Weng, and Kristine can save changes here — everyone else can view read-only.")
         return
 
+    is_test = st.checkbox(
+        "🧪 Mark as a test audit",
+        value=bool((existing or {}).get("is_test", False)),
+        key=f"is_test_{ticket_id}",
+        help="Saved like any other audit, but excluded from the QA Log's dashboard totals and per-agent rollup.",
+    )
+
     if st.button("Save changes" if existing else "Submit audit", key=f"submit_{ticket_id}", type="primary"):
         if not agent_name.strip():
             st.error("Agent Name is required.")
@@ -189,12 +197,14 @@ def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, edi
             "critical_error_status": "CRITICAL ERROR" if any(crit.values()) else "OK",
             "qa_reviewer": auth.current_reviewer(),
             "qa_date": qa_date.isoformat(),
+            "is_test": is_test,
             "updated_at": now,
             "created_at": (existing or {}).get("created_at") or now,
         }
         try:
             db.save_qa_entry(ticket_id, entry)
             db.clear_cache()
+            sheets_backup.backup_qa_entry(ticket_id, entry)
             st.session_state[editing_key] = False
             st.success("Saved.")
             st.rerun()
