@@ -111,15 +111,25 @@ with st.expander("Manage agents"):
                 st.rerun()
 
 # ---------- dashboard ----------
-total = len(entries)
+# Entries flagged "🧪 Mark as a test audit" in the form are excluded from
+# these totals and the per-agent rollup below, so a test submission never
+# skews real numbers — they still show up in the Audit log table further
+# down (with a Test marker) so they stay inspectable.
+metric_entries = [e for e in entries if not e.get("is_test")]
+test_count = len(entries) - len(metric_entries)
+
+total = len(metric_entries)
 counts = {"PASS": 0, "COACHING": 0, "FAIL": 0, "AUTO FAIL": 0}
 score_sum = 0
-for e in entries:
+for e in metric_entries:
     if e.get("result") in counts:
         counts[e["result"]] += 1
     score_sum += e.get("total_score") or 0
 avg_score = round(score_sum / total, 1) if total else None
 pass_rate = round(counts["PASS"] / total * 100, 1) if total else None
+
+if test_count:
+    st.caption(f"🧪 {test_count} test audit{'s' if test_count != 1 else ''} excluded from the totals below.")
 
 c1, c2, c3, c4, c5, c6 = st.columns(6)
 c1.metric("Total Audits", total)
@@ -139,7 +149,7 @@ week_sunday = week_monday + timedelta(days=6)
 
 rollup_rows = []
 for aid, name in sorted(agents_by_id.items(), key=lambda kv: kv[1].lower()):
-    mine = [e for e in entries if e.get("agent_id") == aid or (e.get("agent_name") or "").lower() == name.lower()]
+    mine = [e for e in metric_entries if e.get("agent_id") == aid or (e.get("agent_name") or "").lower() == name.lower()]
     avg = round(sum(e.get("total_score") or 0 for e in mine) / len(mine), 1) if mine else None
     week_count = sum(
         1 for e in mine if e.get("qa_date") and week_monday.isoformat() <= e["qa_date"] <= week_sunday.isoformat()
@@ -190,6 +200,7 @@ if filtered:
             "Total": e.get("total_score"),
             "Result": e.get("result", ""),
             "Reviewer": e.get("qa_reviewer", ""),
+            "Test": "🧪" if e.get("is_test") else "",
             "_ticket_id": e.get("ticket_id") or e.get("id"),
         }
         for e in filtered[:300]
