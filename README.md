@@ -21,8 +21,10 @@ Originally built as an in-conversation Claude artifact; this is the standalone S
    - `[intercom] access_token`
    - `[anthropic] api_key` (optional)
    - `[reviewer_passwords]` — a password for each of Erwin Bagnol, Weng Yee, Kristine Lariosa. Only these three can submit/edit a QA audit or mark a ticket reviewed; anyone with the app link can browse read-only.
-5. **Run locally**: `pip install -r requirements.txt && streamlit run app.py`
-6. **Deploy**: push this repo to GitHub, then create a new app on [share.streamlit.io](https://share.streamlit.io) pointed at it (main file: `app.py`). Add the secrets there before first load.
+5. **Google Sheets backup (optional)**: every saved QA audit can also be mirrored, live, into a separate Google Sheet — distinct from the retired sheet imported into Historical Log. Requires a Google Cloud service account: Google Cloud Console → create/select a project → enable the **Google Sheets API** → IAM & Admin → Service Accounts → create one → Keys → Add key → JSON → share the target sheet with that service account's `client_email` as an Editor → add its key fields and the sheet's id under `[gcp_service_account]` / `qa_backup_sheet_id` in Secrets (see `.streamlit/secrets.toml.example`). Skip this section entirely and the app just skips the backup — Supabase stays the source of truth either way.
+6. **Existing database?** If `qa_entries` was created before the "Mark as test audit" feature, run `sql/migrations/2026_09_08_add_is_test_to_qa_entries.sql` once in the Supabase SQL editor before deploying this version of the code (new installs don't need it — `sql/schema.sql` already includes the column).
+7. **Run locally**: `pip install -r requirements.txt && streamlit run app.py`
+8. **Deploy**: push this repo to GitHub, then create a new app on [share.streamlit.io](https://share.streamlit.io) pointed at it (main file: `app.py`). Add the secrets there before first load.
 
 ## First-deploy sanity check
 
