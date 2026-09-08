@@ -14,14 +14,11 @@ from lib.constants import RUBRIC
 
 st.set_page_config(page_title="Historical Log — Ticket QA Sampler", page_icon="🗄️", layout="wide")
 
-st.sidebar.title("🎫 Ticket Selection")
-auth.render_sidebar_auth()
-st.sidebar.divider()
-st.sidebar.subheader("Historical Log")
-st.sidebar.caption(
-    "Imported from the retired \"2026 - ZEVO QA Tracker v2\" Google Sheet. "
-    "Read-only — not counted in the QA Log's live dashboard or per-agent rollup."
-)
+if not auth.is_signed_in():
+    st.title("Historical Log")
+    st.warning("Sign in to view the Historical Log. Head to Home and sign in as one of the three reviewers.")
+    st.page_link("pages/0_Home.py", label="🏠 Go to Home to sign in", use_container_width=False)
+    st.stop()
 
 ss = st.session_state
 ss.setdefault("hist_open_id", None)
@@ -29,6 +26,10 @@ ss.setdefault("hist_open_id", None)
 entries = db.list_historical_entries()
 
 st.title("Historical Log")
+st.caption(
+    "Imported from the retired \"2026 - ZEVO QA Tracker v2\" Google Sheet. "
+    "Read-only — not counted in the QA Log's live dashboard or per-agent rollup."
+)
 
 if not entries:
     st.info(
