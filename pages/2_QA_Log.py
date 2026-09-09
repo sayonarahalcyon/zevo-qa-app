@@ -182,28 +182,32 @@ with st.expander("Manage agents"):
                 st.rerun()
 
 # ---------- backup sheet ----------
-backup_msg = ss.pop("_backup_sync_msg", None)
-if backup_msg:
-    kind, text = backup_msg
-    (st.success if kind == "ok" else st.error)(text)
+# Visible only to Weng — the other reviewers don't need this control, and a
+# full sheet wipe/rewrite is destructive enough that it shouldn't be one
+# click away for everyone with edit access.
+if auth.current_reviewer() == "Weng Yee":
+    backup_msg = ss.pop("_backup_sync_msg", None)
+    if backup_msg:
+        kind, text = backup_msg
+        (st.success if kind == "ok" else st.error)(text)
 
-with st.expander("Backup sheet"):
-    st.caption(
-        "New audits are mirrored to the Google Sheet backup automatically. Use this to "
-        "rebuild the whole sheet from Supabase — for entries saved while the backup "
-        "sheet's layout was out of date, or before it was configured. It also turns on "
-        "column filters (Result, Escalated, Agent, Date, etc.) on the sheet."
-    )
-    if st.button("Resync all audits to backup sheet", use_container_width=True):
-        count, err = sheets_backup.resync_all_entries(entries)
-        if err:
-            ss["_backup_sync_msg"] = ("error", f"Could not resync the backup sheet: {err}")
-        else:
-            ss["_backup_sync_msg"] = (
-                "ok",
-                f"Resynced {count} audit(s) to the backup sheet and turned on column filters.",
-            )
-        st.rerun()
+    with st.expander("Backup sheet"):
+        st.caption(
+            "New audits are mirrored to the Google Sheet backup automatically. Use this to "
+            "rebuild the whole sheet from Supabase — for entries saved while the backup "
+            "sheet's layout was out of date, or before it was configured. It also turns on "
+            "column filters (Result, Escalated, Agent, Date, etc.) on the sheet."
+        )
+        if st.button("Resync all audits to backup sheet", use_container_width=True):
+            count, err = sheets_backup.resync_all_entries(entries)
+            if err:
+                ss["_backup_sync_msg"] = ("error", f"Could not resync the backup sheet: {err}")
+            else:
+                ss["_backup_sync_msg"] = (
+                    "ok",
+                    f"Resynced {count} audit(s) to the backup sheet and turned on column filters.",
+                )
+            st.rerun()
 
 # ---------- dashboard ----------
 # Entries flagged "🧪 Mark as a test audit" in the form are excluded from
