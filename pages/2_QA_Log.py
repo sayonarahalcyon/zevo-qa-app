@@ -176,73 +176,76 @@ st.title("QA Log")
 st.caption(f"Reviewing as **{auth.current_reviewer()}**")
 
 # ---------- manage agents ----------
-# st.rerun() right after a st.success()/st.error() call can wipe the
-# message before it's visible (the rerun starts a fresh script run
-# almost instantly). Stash the outcome in session_state instead and
-# show it on the run right after, above the expander so it can't be
-# missed even if the expander itself collapses on rerun.
-sync_msg = ss.pop("_agent_sync_msg", None)
-if sync_msg:
-    kind, text = sync_msg
-    (st.success if kind == "ok" else st.error)(text)
+# Visible only to Weng — the roster shouldn't be editable by every reviewer,
+# same reasoning as the Backup sheet section below.
+if auth.current_reviewer() == "Weng Yee":
+    # st.rerun() right after a st.success()/st.error() call can wipe the
+    # message before it's visible (the rerun starts a fresh script run
+    # almost instantly). Stash the outcome in session_state instead and
+    # show it on the run right after, above the expander so it can't be
+    # missed even if the expander itself collapses on rerun.
+    sync_msg = ss.pop("_agent_sync_msg", None)
+    if sync_msg:
+        kind, text = sync_msg
+        (st.success if kind == "ok" else st.error)(text)
 
-with st.expander("Manage agents"):
-    st.caption(
-        "Agents are normally added automatically the first time one of their tickets is opened. "
-        "Use this only to add someone before that happens, or to bulk-sync the roster from Intercom."
-    )
+    with st.expander("Manage agents"):
+        st.caption(
+            "Agents are normally added automatically the first time one of their tickets is opened. "
+            "Use this only to add someone before that happens, or to bulk-sync the roster from Intercom."
+        )
 
-    if st.button("Sync roster from Intercom", use_container_width=True):
-        try:
-            admins = list_admins()
-        except IntercomError as e:
-            st.error(f"Could not reach Intercom: {e}")
-        else:
-            if not admins:
-                st.warning("No admins came back from Intercom — check the access token in Secrets.")
+        if st.button("Sync roster from Intercom", use_container_width=True):
+            try:
+                admins = list_admins()
+            except IntercomError as e:
+                st.error(f"Could not reach Intercom: {e}")
             else:
-                synced = 0
-                failed = []
-                for a in admins:
-                    aid, name = a.get("id"), (a.get("name") or "").strip()
-                    if aid and name and not is_excluded_agent_name(name):
-                        err = db.upsert_agent(aid, name, a.get("email", ""))
-                        if err:
-                            failed.append(f"{name} ({err})")
-                        else:
-                            synced += 1
-                db.clear_cache()
-                if failed:
-                    detail = "; ".join(failed[:5])
-                    if len(failed) > 5:
-                        detail += f"; and {len(failed) - 5} more"
-                    ss["_agent_sync_msg"] = (
-                        "error",
-                        f"Synced {synced} agent(s), but {len(failed)} failed to save: {detail}",
-                    )
+                if not admins:
+                    st.warning("No admins came back from Intercom — check the access token in Secrets.")
                 else:
-                    ss["_agent_sync_msg"] = ("ok", f"Synced {synced} agent(s) from Intercom.")
-                st.rerun()
+                    synced = 0
+                    failed = []
+                    for a in admins:
+                        aid, name = a.get("id"), (a.get("name") or "").strip()
+                        if aid and name and not is_excluded_agent_name(name):
+                            err = db.upsert_agent(aid, name, a.get("email", ""))
+                            if err:
+                                failed.append(f"{name} ({err})")
+                            else:
+                                synced += 1
+                    db.clear_cache()
+                    if failed:
+                        detail = "; ".join(failed[:5])
+                        if len(failed) > 5:
+                            detail += f"; and {len(failed) - 5} more"
+                        ss["_agent_sync_msg"] = (
+                            "error",
+                            f"Synced {synced} agent(s), but {len(failed)} failed to save: {detail}",
+                        )
+                    else:
+                        ss["_agent_sync_msg"] = ("ok", f"Synced {synced} agent(s) from Intercom.")
+                    st.rerun()
 
-    st.markdown("**Add one manually**")
-    with st.form("add_agent_form", clear_on_submit=True):
-        new_name = st.text_input("Name")
-        new_id = st.text_input("Intercom admin ID (numeric — find it under Settings → Teammates)")
-        new_email = st.text_input("Email (optional)")
-        submitted = st.form_submit_button("Add agent")
-    if submitted:
-        if not new_name.strip() or not new_id.strip():
-            st.error("Name and Intercom admin ID are both required.")
-        elif not new_id.strip().isdigit():
-            st.error("Intercom admin ID should be numeric.")
-        else:
-            err = db.upsert_agent(new_id.strip(), new_name.strip(), new_email.strip())
-            if err:
-                st.error(f"Could not save {new_name.strip()}: {err}")
+        st.markdown("**Add one manually**")
+        with st.form("add_agent_form", clear_on_submit=True):
+            new_name = st.text_input("Name")
+            new_id = st.text_input("Intercom admin ID (numeric — find it under Settings → Teammates)")
+            new_email = st.text_input("Email (optional)")
+            submitted = st.form_submit_button("Add agent")
+        if submitted:
+            if not new_name.strip() or not new_id.strip():
+                st.error("Name and Intercom admin ID are both required.")
+            elif not new_id.strip().isdigit():
+                st.error("Intercom admin ID should be numeric.")
             else:
-                db.clear_cache()
-                ss["_agent_sync_msg"] = ("ok", f"Added {new_name.strip()}.")
-                st.rerun()
+                err = db.upsert_agent(new_id.strip(), new_name.strip(), new_email.strip())
+                if err:
+                    st.error(f"Could not save {new_name.strip()}: {err}")
+                else:
+                    db.clear_cache()
+                    ss["_agent_sync_msg"] = ("ok", f"Added {new_name.strip()}.")
+                    st.rerun()
 
 # ---------- backup sheet ----------
 # Visible only to Weng — the other reviewers don't need this control, and a
