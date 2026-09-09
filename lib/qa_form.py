@@ -2,6 +2,13 @@
 
 One audit per ticket; editable afterward by a signed-in reviewer. Mirrors
 the original Claude artifact's form field-for-field.
+
+Editing an already-saved audit is treated as a distinct, logged event —
+see the "edit_log" handling in _render_form()/render() below — because in
+practice a score only gets reopened after it's been saved for one of two
+reasons: the agent or host disputed it, or a reviewer is correcting a
+mistake. Either way that's worth a durable trail: who changed it, when,
+why, and what it looked like before.
 """
 
 from __future__ import annotations
@@ -20,6 +27,12 @@ from lib.constants import (
     compute_total,
 )
 from lib.ui import result_badge_md
+
+EDIT_REASONS = [
+    "Dispute — agent/host disagreed with the score",
+    "Reviewer correction (no dispute)",
+    "Other",
+]
 
 
 def _agent_options() -> list[str]:
@@ -49,6 +62,15 @@ def _render_summary(ticket_id: str, qa: dict, editing_key: str) -> None:
         + (" · 🧪 TEST" if qa.get("is_test") else "")
         + (" · 🚩 ESCALATED" if qa.get("is_escalated") else "")
     )
+    edit_log = qa.get("edit_log") or []
+    if edit_log:
+        last = edit_log[-1]
+        disputed = any((e.get("reason") or "") == "Dispute" for e in edit_log)
+        st.caption(
+            (f"⚖️ Disputed — e" if disputed else "✏️ E")
+            + f"dited {len(edit_log)}x · last by {last.get('edited_by') or '—'} "
+            f"on {_fmt_date(last.get('edited_at'))} ({last.get('reason', '—')})"
+        )
     if auth.is_signed_in():
         if cols[3].button("Edit score", key=f"edit_{ticket_id}"):
             st.session_state[editing_key] = True
@@ -183,11 +205,62 @@ def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, edi
         help="Auto-checked when this ticket came from 'Manually log a ticket' on Weekly QA Batch — toggle any time. Shows as a tag in the QA Log so it's easy to tell apart from the random pull.",
     )
 
+    # A score only gets reopened after being saved for one of two reasons in
+    # practice — a dispute, or a reviewer catching a mistake — so editing an
+    # existing audit requires saying which, logged alongside what the score
+    # used to look like. A brand-new audit has nothing to log yet.
+    edit_reason = None
+    dispute_reason = ""
+    dispute_conclusion = ""
+    if existing:
+        st.markdown("**Why is this score being edited?**")
+        edit_reason = st.selectbox(
+            "Reason for this edit",
+            EDIT_REASONS,
+            key=f"edit_reason_{ticket_id}",
+        )
+        if edit_reason.startswith("Dispute"):
+            dispute_reason = st.text_area(
+                "Dispute reason — what was disputed, and why",
+                key=f"dispute_reason_{ticket_id}",
+            )
+            dispute_conclusion = st.text_area(
+                "Dispute conclusion — how it was resolved (leave blank if not decided yet)",
+                key=f"dispute_conclusion_{ticket_id}",
+            )
+
     if st.button("Save changes" if existing else "Submit audit", key=f"submit_{ticket_id}", type="primary"):
         if not agent_name.strip():
             st.error("Agent Name is required.")
             return
+        if existing and edit_reason.startswith("Dispute") and not dispute_reason.strip():
+            st.error("Dispute reason is required when editing a score because of a dispute.")
+            return
         now = datetime.utcnow().isoformat()
+        edit_log = list((existing or {}).get("edit_log") or [])
+        if existing:
+            edit_log.append(
+                {
+                    "edited_at": now,
+                    "edited_by": auth.current_reviewer(),
+                    "reason": (
+                        "Dispute"
+                        if edit_reason.startswith("Dispute")
+                        else "Correction"
+                        if edit_reason.startswith("Reviewer")
+                        else "Other"
+                    ),
+                    "dispute_reason": dispute_reason.strip(),
+                    "dispute_conclusion": dispute_conclusion.strip(),
+                    "previous_score": existing.get("total_score"),
+                    "previous_result": existing.get("result"),
+                    "previous_scores": existing.get("scores"),
+                    "previous_remarks": existing.get("remarks"),
+                    "previous_overall_comments": existing.get("overall_comments"),
+                    "previous_qa_reviewer": existing.get("qa_reviewer"),
+                    "previous_qa_date": existing.get("qa_date"),
+                }
+            )
         entry = {
             "agent_id": (existing or {}).get("agent_id"),
             "agent_name": agent_name.strip(),
@@ -207,6 +280,7 @@ def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, edi
             "qa_date": qa_date.isoformat(),
             "is_test": is_test,
             "is_escalated": is_escalated,
+            "edit_log": edit_log,
             "updated_at": now,
             "created_at": (existing or {}).get("created_at") or now,
         }
@@ -228,6 +302,15 @@ def _parse_date(value):
         return datetime.fromisoformat(str(value)).date()
     except Exception:
         return None
+
+
+def _fmt_date(iso_value) -> str:
+    if not iso_value:
+        return "—"
+    try:
+        return datetime.fromisoformat(str(iso_value)).strftime("%Y-%m-%d")
+    except Exception:
+        return str(iso_value)
 
 
 def _safe_index(options: list, value) -> int:
