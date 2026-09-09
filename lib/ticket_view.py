@@ -31,7 +31,7 @@ def learn_agents_from_conversation(convo: dict) -> dict:
     return seen
 
 
-def render_ticket(convo: dict, ticket_url: str, on_pick_another=None) -> None:
+def render_ticket(convo: dict, ticket_url: str, on_pick_another=None, default_escalated: bool = False) -> None:
     ticket_id = str(convo["id"])
     reviewed_map = db.list_reviewed()
     is_reviewed = ticket_id in reviewed_map
@@ -64,4 +64,4 @@ def render_ticket(convo: dict, ticket_url: str, on_pick_another=None) -> None:
 
     seen = learn_agents_from_conversation(convo)
     guessed_agent = next((n for aid, n in seen.items() if str(aid) == str(convo.get("admin_assignee_id"))), "")
-    render_qa_form(convo, ticket_url or conversation_url(ticket_id), guessed_agent)
+    render_qa_form(convo, ticket_url or conversation_url(ticket_id), guessed_agent, default_escalated=default_escalated)
