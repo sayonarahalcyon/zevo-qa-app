@@ -262,40 +262,37 @@ for e in entries:
 filtered.sort(key=lambda e: (e.get("qa_date") or "", e.get("updated_at") or ""), reverse=True)
 
 if filtered:
-    st.caption("Click a row to see that audit's scores and feedback. Click the ticket number to open it in Intercom.")
-    table_rows = [
-        {
-            "Date": e.get("qa_date", ""),
-            "Agent": e.get("agent_name", ""),
-            "Ticket": e.get("ticket_link") or (conversation_url(e.get("ticket_id")) if e.get("ticket_id") else None),
-            "Concern": ", ".join(e.get("concern_types") or []),
-            "Total": e.get("total_score"),
-            "Result": e.get("result", ""),
-            "Reviewer": e.get("qa_reviewer", ""),
-            "Test": "🧪" if e.get("is_test") else "",
-            "_key": _entry_key(e),
-        }
-        for e in filtered[:300]
-    ]
-    df = pd.DataFrame(table_rows)
-    event = st.dataframe(
-        df.drop(columns=["_key"]),
-        use_container_width=True,
-        hide_index=True,
-        on_select="rerun",
-        selection_mode="single-row",
-        column_config={
-            "Ticket": st.column_config.LinkColumn(
-                "Ticket", display_text=r".*/conversation/(\d+)$", width="small"
-            ),
-        },
-    )
+    st.caption("Click View to see an audit's scores and feedback. Click the ticket number to open it in Intercom.")
+
+    # Built as manual rows (not st.dataframe row-selection) on purpose: the
+    # dataframe's built-in row selection only fires when the tiny checkbox
+    # in the leftmost column is clicked, not when clicking the row's text —
+    # confusing since nothing here looks like a checkbox column. A plain
+    # button per row is unambiguous and always clickable.
+    row_widths = [1, 1.6, 1.3, 1.4, 0.6, 1, 1.1, 0.5, 0.8]
+    h1, h2, h3, h4, h5, h6, h7, h8, h9 = st.columns(row_widths)
+    for h, label in zip((h1, h2, h3, h4, h5, h6, h7, h8), ("Date", "Agent", "Ticket", "Concern", "Total", "Result", "Reviewer", "Test")):
+        h.markdown(f"**{label}**")
+
+    shown = filtered[:300]
+    for e in shown:
+        ticket_id = e.get("ticket_id") or ""
+        ticket_url = e.get("ticket_link") or (conversation_url(ticket_id) if ticket_id else "")
+        c1, c2, c3, c4, c5, c6, c7, c8, c9 = st.columns(row_widths)
+        c1.write(e.get("qa_date", "") or "—")
+        c2.write(e.get("agent_name", "") or "—")
+        c3.markdown(f"[{ticket_id}]({ticket_url})" if ticket_url else (ticket_id or "—"))
+        c4.write(", ".join(e.get("concern_types") or []) or "—")
+        c5.write(e.get("total_score") if e.get("total_score") is not None else "—")
+        c6.markdown(result_badge_md(e.get("result", "")))
+        c7.write(e.get("qa_reviewer", "") or "—")
+        c8.write("🧪" if e.get("is_test") else "")
+        if c9.button("View", key=f"view_audit_{_entry_key(e)}", use_container_width=True):
+            ss["log_open_audit_key"] = _entry_key(e)
+            st.rerun()
+
     if len(filtered) > 300:
         st.caption(f"Showing the most recent 300 of {len(filtered)} matching audits.")
-    selected = event.selection.rows if hasattr(event, "selection") else []
-    if selected:
-        ss["log_open_audit_key"] = table_rows[selected[0]]["_key"]
-        st.rerun()
 else:
     st.caption("No audits match these filters yet.")
 
