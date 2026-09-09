@@ -84,10 +84,13 @@ def search_conversations(
 ) -> tuple[list[dict], int, bool]:
     """Returns (results, total_count, fin_filter_applied)."""
     clauses = [{"field": "state", "operator": "=", "value": "closed"}]
+    # Filtered on when the conversation was actually closed (statistics.last_close_at),
+    # not when it was first created — a ticket a customer opens on Monday but an
+    # agent doesn't close until Wednesday should count in a Wed-only range.
     if start_date:
-        clauses.append({"field": "created_at", "operator": ">", "value": _to_epoch(start_date)})
+        clauses.append({"field": "statistics.last_close_at", "operator": ">", "value": _to_epoch(start_date)})
     if end_date:
-        clauses.append({"field": "created_at", "operator": "<", "value": _to_epoch(end_date) + 86400})
+        clauses.append({"field": "statistics.last_close_at", "operator": "<", "value": _to_epoch(end_date) + 86400})
     if admin_id:
         clauses.append({"field": "admin_assignee_id", "operator": "=", "value": str(admin_id)})
 
