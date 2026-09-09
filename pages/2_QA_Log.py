@@ -75,10 +75,21 @@ if ss.get("log_open_audit_key"):
     m2.markdown(f"**Renter/Host:** {entry.get('renter_host') or '—'}")
     m3.markdown(f"**Concern type:** {', '.join(entry.get('concern_types') or []) or '—'}")
 
-    if ticket_id and st.button("View full ticket conversation"):
+    b_cols = st.columns([1, 1, 3])
+    if ticket_id and b_cols[0].button("View full ticket conversation"):
         ss["log_open_ticket_id"] = ticket_id
         ss["log_open_audit_key"] = None
         st.rerun()
+    if ticket_id and auth.is_signed_in():
+        if b_cols[1].button("Edit score", type="primary"):
+            # Jumps straight to the ticket's QA form in edit mode (skipping
+            # its own read-only summary step) — this is the shortcut so
+            # editing a score doesn't require clicking through the full
+            # ticket first.
+            ss["log_open_ticket_id"] = ticket_id
+            ss["log_open_audit_key"] = None
+            ss[f"qa_editing_{ticket_id}"] = True
+            st.rerun()
 
     st.divider()
     st.subheader("Scoring breakdown")
