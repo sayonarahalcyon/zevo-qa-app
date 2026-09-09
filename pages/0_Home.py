@@ -13,11 +13,11 @@ import streamlit as st
 
 from lib import auth, db, ui
 
-st.set_page_config(page_title="ZEVO Quality Evaluation", page_icon="🎫", layout="wide")
+st.set_page_config(page_title="ZEVO Quality Evaluation", page_icon="🎟️", layout="wide")
 ui.inject_style()
 
 # ---------- hero ----------
-st.title("🎫 ZEVO Quality Evaluation")
+st.title("🎟️ ZEVO Quality Evaluation")
 st.caption("Random sampling and scoring of closed Intercom conversations against ZEVO Support's QA Rubric.")
 
 st.write("")
