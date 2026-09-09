@@ -10,6 +10,7 @@ import re
 from datetime import date, timedelta
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from lib import auth, db, sampling, ui
 from lib.intercom_client import IntercomError, conversation_url, get_conversation, search_conversations
@@ -17,6 +18,45 @@ from lib.ticket_view import render_ticket
 
 st.set_page_config(page_title="Weekly QA Batch — Ticket QA Sampler", page_icon=ui.LOGO_URL, layout="wide")
 ui.inject_style()
+
+# ---------- reset unsaved ticket-selection state on a real browser reload ----------
+# Streamlit keeps the same session_state across a hard refresh, so filters,
+# a Quick Sample pool, or a manually-loaded ticket used to stay on screen
+# after F5 — nothing here is meant to survive a reload, unlike the QA Log's
+# saved audits. A real reload (not a widget rerun, not sidebar navigation,
+# both of which never touch browser navigation at all) sets ?reset=1 via
+# the script below, and we clear the unsaved keys for it here before any
+# widget reads them. Persisted data (weekly picks, the QA Log) is untouched.
+_RESET_KEYS = [
+    "batch_agent_select", "batch_range_start", "batch_range_end", "batch_exclude_fin", "batch_open_ticket_id",
+    "qs_pool", "qs_pool_total", "qs_used_ids", "qs_current_ticket_id", "qs_current_ticket_url", "qs_fin_filter_warning",
+    "qs_start_date", "qs_end_date", "qs_exclude_fin", "qs_agent_filter", "qs_skip_reviewed",
+    "manual_open_ticket_id", "manual_ticket_input",
+]
+if st.query_params.get("reset") == "1":
+    for _k in _RESET_KEYS:
+        st.session_state.pop(_k, None)
+    del st.query_params["reset"]
+
+components.html(
+    """
+    <script>
+    (function () {
+        try {
+            var nav = window.parent.performance.getEntriesByType('navigation')[0];
+            if (nav && nav.type === 'reload') {
+                var url = new URL(window.parent.location.href);
+                if (url.searchParams.get('reset') !== '1') {
+                    url.searchParams.set('reset', '1');
+                    window.parent.location.replace(url.toString());
+                }
+            }
+        } catch (e) {}
+    })();
+    </script>
+    """,
+    height=0,
+)
 
 if not auth.is_signed_in():
     ui.page_heading("Weekly QA Batch")
