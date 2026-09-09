@@ -67,6 +67,7 @@ if ss.get("log_open_audit_key"):
     b3.caption(
         f"Reviewed by {entry.get('qa_reviewer') or '—'} · {entry.get('qa_date') or '—'}"
         + (" · 🧪 TEST" if entry.get("is_test") else "")
+        + (" · 🚩 ESCALATED" if entry.get("is_escalated") else "")
     )
 
     m1, m2, m3 = st.columns(3)
@@ -274,16 +275,19 @@ if filtered:
     # in the leftmost column is clicked, not when clicking the row's text —
     # confusing since nothing here looks like a checkbox column. A plain
     # button per row is unambiguous and always clickable.
-    row_widths = [1, 1.6, 1.3, 1.4, 0.6, 1, 1.1, 0.5, 0.8]
-    h1, h2, h3, h4, h5, h6, h7, h8, h9 = st.columns(row_widths)
-    for h, label in zip((h1, h2, h3, h4, h5, h6, h7, h8), ("Date", "Agent", "Ticket", "Concern", "Total", "Result", "Reviewer", "Test")):
+    row_widths = [1, 1.6, 1.3, 1.4, 0.6, 1, 1.1, 0.5, 0.6, 0.8]
+    h1, h2, h3, h4, h5, h6, h7, h8, h9, h10 = st.columns(row_widths)
+    for h, label in zip(
+        (h1, h2, h3, h4, h5, h6, h7, h8, h9),
+        ("Date", "Agent", "Ticket", "Concern", "Total", "Result", "Reviewer", "Test", "Escalated"),
+    ):
         h.markdown(f"**{label}**")
 
     shown = filtered[:300]
     for e in shown:
         ticket_id = e.get("ticket_id") or ""
         ticket_url = e.get("ticket_link") or (conversation_url(ticket_id) if ticket_id else "")
-        c1, c2, c3, c4, c5, c6, c7, c8, c9 = st.columns(row_widths)
+        c1, c2, c3, c4, c5, c6, c7, c8, c9, c10 = st.columns(row_widths)
         c1.write(e.get("qa_date", "") or "—")
         c2.write(e.get("agent_name", "") or "—")
         c3.markdown(f"[{ticket_id}]({ticket_url})" if ticket_url else (ticket_id or "—"))
@@ -292,7 +296,8 @@ if filtered:
         c6.markdown(result_badge_md(e.get("result", "")))
         c7.write(e.get("qa_reviewer", "") or "—")
         c8.write("🧪" if e.get("is_test") else "")
-        if c9.button("View", key=f"view_audit_{_entry_key(e)}", use_container_width=True):
+        c9.write("🚩" if e.get("is_escalated") else "")
+        if c10.button("View", key=f"view_audit_{_entry_key(e)}", use_container_width=True):
             ss["log_open_audit_key"] = _entry_key(e)
             st.rerun()
 
