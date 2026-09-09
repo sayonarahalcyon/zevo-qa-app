@@ -11,11 +11,12 @@ from datetime import date, timedelta
 
 import streamlit as st
 
-from lib import auth, db, sampling
+from lib import auth, db, sampling, ui
 from lib.intercom_client import IntercomError, conversation_url, get_conversation, search_conversations
 from lib.ticket_view import render_ticket
 
 st.set_page_config(page_title="Weekly QA Batch — Ticket QA Sampler", page_icon="🎫", layout="wide")
+ui.inject_style()
 
 if not auth.is_signed_in():
     st.title("🎫 Weekly QA Batch")
