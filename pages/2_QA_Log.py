@@ -111,27 +111,51 @@ if ss.get("log_open_audit_key"):
     if edit_log:
         st.divider()
         st.subheader(f"Edit / dispute history ({len(edit_log)})")
-        for i, rev in enumerate(reversed(edit_log), start=1):
+        for i in range(len(edit_log) - 1, -1, -1):
+            rev = edit_log[i]
             reason = rev.get("reason") or "—"
             icon = "⚖️" if reason == "Dispute" else "✏️"
             edited_date = (rev.get("edited_at") or "")[:10] or "—"
+            prev_score = rev.get("previous_score")
+            prev_result = rev.get("previous_result") or "—"
+            # The score/result this edit resulted in — either the next edit's
+            # "before" snapshot, or (for the most recent edit) the audit's
+            # current, live score.
+            if i + 1 < len(edit_log):
+                after_score = edit_log[i + 1].get("previous_score")
+                after_result = edit_log[i + 1].get("previous_result") or "—"
+            else:
+                after_score = entry.get("total_score")
+                after_result = entry.get("result") or "—"
+            unchanged = prev_score == after_score and prev_result == after_result
             with st.expander(
                 f"{icon} {reason} — edited by {rev.get('edited_by') or '—'} on {edited_date}",
-                expanded=(i == 1),
+                expanded=(i == len(edit_log) - 1),
             ):
-                prev_score = rev.get("previous_score")
-                prev_result = rev.get("previous_result") or "—"
-                st.markdown(
-                    f"**Score before this edit:** {prev_score if prev_score is not None else '—'} / 100 ({prev_result})"
-                )
+                if reason == "Dispute":
+                    st.markdown(f"**Dispute reason:** {rev.get('dispute_reason') or '—'}")
+                    st.markdown(f"**Dispute conclusion:** {rev.get('dispute_conclusion') or 'Not yet resolved'}")
+                    if unchanged:
+                        st.info(
+                            f"Dispute reviewed — conclusion: {rev.get('dispute_conclusion') or 'not yet recorded'}. "
+                            f"Original score remains the same: "
+                            f"{prev_score if prev_score is not None else '—'} / 100 ({prev_result})."
+                        )
+                    else:
+                        st.markdown(
+                            f"**Score:** {prev_score if prev_score is not None else '—'} / 100 ({prev_result}) "
+                            f"→ {after_score if after_score is not None else '—'} / 100 ({after_result})"
+                        )
+                else:
+                    st.markdown(
+                        f"**Score:** {prev_score if prev_score is not None else '—'} / 100 ({prev_result}) "
+                        f"→ {after_score if after_score is not None else '—'} / 100 ({after_result})"
+                    )
                 if rev.get("previous_qa_reviewer") or rev.get("previous_qa_date"):
                     st.caption(
                         f"Originally reviewed by {rev.get('previous_qa_reviewer') or '—'} "
                         f"on {rev.get('previous_qa_date') or '—'}"
                     )
-                if reason == "Dispute":
-                    st.markdown(f"**Dispute reason:** {rev.get('dispute_reason') or '—'}")
-                    st.markdown(f"**Dispute conclusion:** {rev.get('dispute_conclusion') or 'Not yet resolved'}")
                 if rev.get("previous_overall_comments"):
                     st.caption(f"Previous overall comments: {rev['previous_overall_comments']}")
 
