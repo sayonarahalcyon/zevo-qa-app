@@ -15,6 +15,17 @@ from lib.qa_form import render as render_qa_form
 from lib.ui import fmt_date_short, render_badges, render_transcript
 
 
+def _spam_flag_notes(transcript_entries: list[dict]) -> list[dict]:
+    """Internal notes that mention "spam" — surfaced as a warning so a
+    reviewer doesn't spend time scoring a ticket like a marketing email as a
+    real support conversation."""
+    return [
+        e
+        for e in transcript_entries
+        if e.get("kind") == "msg" and e.get("is_note") and "spam" in (e.get("body") or "").lower()
+    ]
+
+
 def learn_agents_from_conversation(convo: dict) -> dict:
     """Upserts any admin authors into the agents table and returns {id: name}."""
     seen = {}
@@ -36,6 +47,16 @@ def render_ticket(convo: dict, ticket_url: str, on_pick_another=None, default_es
     reviewed_map = db.list_reviewed()
     is_reviewed = ticket_id in reviewed_map
     title = (convo.get("custom_attributes") or {}).get("AI Title") or convo.get("title") or f"Conversation #{ticket_id}"
+
+    transcript_entries = build_transcript(convo)
+    spam_notes = _spam_flag_notes(transcript_entries)
+    if spam_notes:
+        flaggers = sorted({(e.get("author") or {}).get("name") or "Someone" for e in spam_notes})
+        st.error(
+            f"**{', '.join(flaggers)}** flagged this conversation as spam in an internal note — "
+            "likely not a real support ticket. Consider skipping it rather than scoring it.",
+            icon="🚫",
+        )
 
     render_badges(convo, is_reviewed)
     st.header(title)
@@ -59,7 +80,6 @@ def render_ticket(convo: dict, ticket_url: str, on_pick_another=None, default_es
             db.clear_cache()
             st.rerun()
 
-    transcript_entries = build_transcript(convo)
     with st.expander(f"💬 Conversation ({len(transcript_entries)} messages)", expanded=False):
         render_transcript(transcript_entries)
 
