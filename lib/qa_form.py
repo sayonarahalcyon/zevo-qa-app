@@ -29,7 +29,7 @@ from lib.constants import (
 from lib.ui import result_badge_md
 
 EDIT_REASONS = [
-    "Dispute — agent/host disagreed with the score",
+    "Dispute — agent or TL disagreed with the score",
     "Reviewer correction (no dispute)",
     "Other",
 ]
@@ -66,10 +66,20 @@ def _render_summary(ticket_id: str, qa: dict, editing_key: str) -> None:
     if edit_log:
         last = edit_log[-1]
         disputed = any((e.get("reason") or "") == "Dispute" for e in edit_log)
+        prev_score = last.get("previous_score")
+        cur_score = qa.get("total_score")
+        if prev_score is not None and cur_score is not None:
+            score_note = (
+                f" · score unchanged at {cur_score}/100"
+                if prev_score == cur_score
+                else f" · {prev_score} → {cur_score}/100"
+            )
+        else:
+            score_note = ""
         st.caption(
             (f"⚖️ Disputed — e" if disputed else "✏️ E")
             + f"dited {len(edit_log)}x · last by {last.get('edited_by') or '—'} "
-            f"on {_fmt_date(last.get('edited_at'))} ({last.get('reason', '—')})"
+            f"on {_fmt_date(last.get('edited_at'))} ({last.get('reason', '—')}){score_note}"
         )
     if auth.is_signed_in():
         if cols[3].button("Edit score", key=f"edit_{ticket_id}"):
