@@ -65,6 +65,22 @@ def list_agents() -> list[dict]:
         return []
 
 
+def delete_agent(agent_id: str) -> str | None:
+    """Deletes one row from the agents directory. Returns None on success, or
+    an error message. Used only by the QA Log's Weng-only "Manage agents"
+    tool — e.g. removing someone who's left the team. qa_entries and
+    weekly_picks store the agent's name directly rather than a live
+    reference to this table, so past QA records are untouched."""
+    db = get_client()
+    if not db:
+        return "Database is not connected — check the Supabase URL/key in Secrets."
+    try:
+        db.table("agents").delete().eq("id", str(agent_id)).execute()
+        return None
+    except Exception as e:
+        return str(e)
+
+
 # ---------- reviewed ----------
 
 def mark_reviewed(ticket_id: str, subject: str, state: str, url: str) -> None:
