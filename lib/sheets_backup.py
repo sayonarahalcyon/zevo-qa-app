@@ -71,6 +71,13 @@ def _get_worksheet():
     try:
         return _connect_worksheet()
     except Exception:
+        # TEMPORARY diagnostic logging (2026-09-09) — print goes to the
+        # Streamlit Cloud app logs so we can see why the backup silently
+        # isn't writing. Remove once the Sheets backup is confirmed working.
+        import traceback
+
+        print("[sheets_backup] _connect_worksheet failed:")
+        traceback.print_exc()
         return None
 
 
@@ -79,6 +86,7 @@ def backup_qa_entry(ticket_id: str, entry: dict) -> None:
     failure must not block or roll back the real save to Supabase."""
     ws = _get_worksheet()
     if not ws:
+        print("[sheets_backup] backup_qa_entry: no worksheet, skipping row for ticket", ticket_id)
         return
     try:
         row = [
@@ -98,5 +106,9 @@ def backup_qa_entry(ticket_id: str, entry: dict) -> None:
             "TEST" if entry.get("is_test") else "",
         ]
         ws.append_row(row)
+        print("[sheets_backup] backup_qa_entry: appended row for ticket", ticket_id)
     except Exception:
-        pass
+        import traceback
+
+        print("[sheets_backup] backup_qa_entry: append_row failed for ticket", ticket_id)
+        traceback.print_exc()
