@@ -43,14 +43,12 @@ def fmt_date_short(epoch_seconds) -> str:
 # Streamlit's own [theme] section in .streamlit/config.toml sets the base
 # colors (background/surface/text/accent) so they're consistent even before
 # the page finishes loading; this CSS layers on the parts config.toml can't
-# reach — the two Google Fonts, rounded stat-tile cards, the sidebar's
-# active-page rail, and the pill-shaped result badges used by
-# result_badge_md() below. Call inject_style() once near the top of every
+# reach — rounded stat-tile cards, the sidebar's active-page rail, and the
+# pill-shaped result badges used by result_badge_md() below. Fonts are left
+# at Streamlit's default. Call inject_style() once near the top of every
 # page, right after st.set_page_config().
 _STYLE_BLOCK = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Public+Sans:wght@400;500;600&display=swap');
-
 :root {
     --qa-accent: #14a173;
     --qa-accent-soft: #e4f6ee;
@@ -59,18 +57,6 @@ _STYLE_BLOCK = """
     --qa-fail: #cf4a5c;
     --qa-fail-soft: #fbe6e8;
     --qa-muted: #5c6f66;
-}
-
-.stApp {
-    font-family: 'Public Sans', system-ui, -apple-system, sans-serif !important;
-}
-.stApp code, .stApp pre, .stApp kbd, .stApp samp {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
-}
-.stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6 {
-    font-family: 'Sora', system-ui, sans-serif !important;
-    font-weight: 700 !important;
-    letter-spacing: -0.01em;
 }
 
 /* ---- stat tiles (st.metric) ---- */
@@ -84,9 +70,6 @@ div[data-testid="stMetricLabel"] p {
     font-size: 0.78rem;
     font-weight: 500;
     color: var(--qa-muted);
-}
-div[data-testid="stMetricValue"] {
-    font-family: 'Sora', system-ui, sans-serif !important;
 }
 div[data-testid="stMetricValue"] p {
     font-variant-numeric: tabular-nums;
@@ -118,7 +101,6 @@ div[data-testid="stMetricValue"] p {
 /* ---- result pills — see result_badge_md() ---- */
 .qa-chip {
     display: inline-block;
-    font-family: 'Public Sans', system-ui, sans-serif;
     font-size: 0.78rem;
     font-weight: 600;
     padding: 3px 11px;
@@ -134,8 +116,8 @@ div[data-testid="stMetricValue"] p {
 
 
 def inject_style() -> None:
-    """Applies the app's look — fonts, stat-tile cards, sidebar active-page
-    rail, result pills. Call once near the top of every page, right after
+    """Applies the app's look — stat-tile cards, sidebar active-page rail,
+    result pills. Call once near the top of every page, right after
     st.set_page_config()."""
     st.markdown(_STYLE_BLOCK, unsafe_allow_html=True)
 
