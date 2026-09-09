@@ -55,7 +55,7 @@ def _render_summary(ticket_id: str, qa: dict, editing_key: str) -> None:
     st.divider()
     st.subheader("QA Audit")
     cols = st.columns([2, 2, 3, 1])
-    cols[0].markdown(result_badge_md(qa.get("result", "")))
+    cols[0].markdown(result_badge_md(qa.get("result", "")), unsafe_allow_html=True)
     cols[1].markdown(f"**{qa.get('total_score', '—')} / 100**")
     cols[2].caption(
         f"{qa.get('agent_name', '')} · reviewed by {qa.get('qa_reviewer', '—')} · {qa.get('qa_date', '')}"
