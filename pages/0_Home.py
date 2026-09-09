@@ -11,27 +11,10 @@ from datetime import date, timedelta
 
 import streamlit as st
 
-from lib import auth, db
+from lib import auth, db, ui
 
 st.set_page_config(page_title="ZEVO Quality Evaluation", page_icon="🎫", layout="wide")
-
-st.markdown(
-    """
-    <style>
-    div[data-testid="stMetric"] {
-        background-color: rgba(151, 166, 195, 0.08);
-        border: 1px solid rgba(151, 166, 195, 0.2);
-        border-radius: 10px;
-        padding: 14px 18px 12px 18px;
-    }
-    div[data-testid="stMetricLabel"] {
-        font-size: 0.85rem;
-        opacity: 0.85;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+ui.inject_style()
 
 # ---------- hero ----------
 st.title("🎫 ZEVO Quality Evaluation")
