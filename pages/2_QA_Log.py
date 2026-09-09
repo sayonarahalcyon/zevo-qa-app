@@ -248,6 +248,29 @@ if auth.current_reviewer() == "Weng Yee":
                     ss["_agent_sync_msg"] = ("ok", f"Added {new_name.strip()}.")
                     st.rerun()
 
+        st.markdown("**Remove an agent**")
+        st.caption(
+            "For someone who's left the team. Only removes them from this directory — "
+            "past QA entries and weekly picks under their name are untouched."
+        )
+        removable = sorted(agents, key=lambda a: (a.get("name") or "").lower())
+        remove_options = ["Select an agent..."] + [f'{a["name"]} ({a["id"]})' for a in removable]
+        remove_choice = st.selectbox("Agent to remove", remove_options, key="remove_agent_select")
+        if remove_choice != "Select an agent...":
+            remove_agent = removable[remove_options.index(remove_choice) - 1]
+            remove_confirm = st.checkbox(
+                f"Yes, remove {remove_agent['name']} — I understand it can't be undone.",
+                key="remove_agent_confirm",
+            )
+            if st.button("Remove", type="primary", disabled=not remove_confirm, key="remove_agent_button"):
+                err = db.delete_agent(remove_agent["id"])
+                db.clear_cache()
+                if err:
+                    ss["_agent_sync_msg"] = ("error", f"Could not remove {remove_agent['name']}: {err}")
+                else:
+                    ss["_agent_sync_msg"] = ("ok", f"Removed {remove_agent['name']} from the agent directory.")
+                st.rerun()
+
 # ---------- backup sheet ----------
 # Visible only to Weng — the other reviewers don't need this control, and a
 # full sheet wipe/rewrite is destructive enough that it shouldn't be one
