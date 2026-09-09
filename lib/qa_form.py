@@ -26,7 +26,7 @@ def _agent_options() -> list[str]:
     return sorted({a["name"] for a in db.list_agents() if a.get("name")})
 
 
-def render(convo: dict, ticket_url: str, guessed_agent_name: str) -> None:
+def render(convo: dict, ticket_url: str, guessed_agent_name: str, default_escalated: bool = False) -> None:
     ticket_id = str(convo["id"])
     existing = db.get_qa_entry(ticket_id)
     editing_key = f"qa_editing_{ticket_id}"
@@ -35,7 +35,7 @@ def render(convo: dict, ticket_url: str, guessed_agent_name: str) -> None:
         _render_summary(ticket_id, existing, editing_key)
         return
 
-    _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, editing_key)
+    _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, editing_key, default_escalated)
 
 
 def _render_summary(ticket_id: str, qa: dict, editing_key: str) -> None:
@@ -47,6 +47,7 @@ def _render_summary(ticket_id: str, qa: dict, editing_key: str) -> None:
     cols[2].caption(
         f"{qa.get('agent_name', '')} · reviewed by {qa.get('qa_reviewer', '—')} · {qa.get('qa_date', '')}"
         + (" · 🧪 TEST" if qa.get("is_test") else "")
+        + (" · 🚩 ESCALATED" if qa.get("is_escalated") else "")
     )
     if auth.is_signed_in():
         if cols[3].button("Edit score", key=f"edit_{ticket_id}"):
@@ -56,7 +57,7 @@ def _render_summary(ticket_id: str, qa: dict, editing_key: str) -> None:
         cols[3].caption("Sign in to edit")
 
 
-def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, editing_key) -> None:
+def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, editing_key, default_escalated: bool = False) -> None:
     st.divider()
     header_cols = st.columns([4, 1])
     header_cols[0].subheader("QA Audit" + (" — editing" if existing else ""))
@@ -168,11 +169,18 @@ def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, edi
         st.caption("Only Erwin, Weng, and Kristine can save changes here — everyone else can view read-only.")
         return
 
-    is_test = st.checkbox(
+    tc1, tc2 = st.columns(2)
+    is_test = tc1.checkbox(
         "🧪 Mark as a test audit",
         value=bool((existing or {}).get("is_test", False)),
         key=f"is_test_{ticket_id}",
         help="Saved like any other audit, but excluded from the QA Log's dashboard totals and per-agent rollup.",
+    )
+    is_escalated = tc2.checkbox(
+        "🚩 Escalated (manually added, not the random pull)",
+        value=bool((existing or {}).get("is_escalated", default_escalated)),
+        key=f"is_escalated_{ticket_id}",
+        help="Auto-checked when this ticket came from 'Manually log a ticket' on Weekly QA Batch — toggle any time. Shows as a tag in the QA Log so it's easy to tell apart from the random pull.",
     )
 
     if st.button("Save changes" if existing else "Submit audit", key=f"submit_{ticket_id}", type="primary"):
@@ -198,6 +206,7 @@ def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, edi
             "qa_reviewer": auth.current_reviewer(),
             "qa_date": qa_date.isoformat(),
             "is_test": is_test,
+            "is_escalated": is_escalated,
             "updated_at": now,
             "created_at": (existing or {}).get("created_at") or now,
         }
