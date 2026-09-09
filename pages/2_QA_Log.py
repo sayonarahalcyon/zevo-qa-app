@@ -9,6 +9,7 @@ from lib import auth, db
 from lib.constants import CRITICAL_ERRORS, DISPUTE_FORM_URL, RUBRIC, RUBRIC_GUIDE, is_excluded_agent_name
 from lib.intercom_client import IntercomError, conversation_url, get_conversation, list_admins
 from lib.ticket_view import render_ticket
+from lib.ui import result_badge_md
 
 st.set_page_config(page_title="QA Log — Ticket QA Sampler", page_icon="🎫", layout="wide")
 
@@ -19,11 +20,17 @@ if not auth.is_signed_in():
     st.stop()
 
 ss = st.session_state
-ss.setdefault("log_open_ticket_id", None)
+ss.setdefault("log_open_ticket_id", None)  # full Intercom conversation transcript
+ss.setdefault("log_open_audit_key", None)  # QA scorecard for one audit
 
 entries = db.list_qa_entries()
 agents = db.list_agents()
 agents_by_id = {a["id"]: a["name"] for a in agents}
+
+
+def _entry_key(e: dict):
+    return e.get("ticket_id") or e.get("id")
+
 
 if ss.get("log_open_ticket_id"):
     open_id = ss["log_open_ticket_id"]
@@ -36,6 +43,69 @@ if ss.get("log_open_ticket_id"):
         render_ticket(convo, conversation_url(open_id))
     except IntercomError as e:
         st.error(f"Could not load conversation #{open_id}: {e}")
+    st.stop()
+
+if ss.get("log_open_audit_key"):
+    key = ss["log_open_audit_key"]
+    entry = next((e for e in entries if _entry_key(e) == key), None)
+
+    if st.button("← Back to QA Log"):
+        ss["log_open_audit_key"] = None
+        st.rerun()
+
+    if not entry:
+        st.warning("That audit couldn't be found — it may have changed since this list loaded. Go back and try again.")
+        st.stop()
+
+    ticket_id = entry.get("ticket_id") or ""
+    ticket_url = entry.get("ticket_link") or (conversation_url(ticket_id) if ticket_id else "")
+
+    st.title(f"QA Audit — {entry.get('agent_name') or 'Unknown agent'}")
+    b1, b2, b3 = st.columns([2, 2, 3])
+    b1.markdown(result_badge_md(entry.get("result", "")))
+    b2.markdown(f"**{entry.get('total_score', '—')} / 100**")
+    b3.caption(
+        f"Reviewed by {entry.get('qa_reviewer') or '—'} · {entry.get('qa_date') or '—'}"
+        + (" · 🧪 TEST" if entry.get("is_test") else "")
+    )
+
+    m1, m2, m3 = st.columns(3)
+    m1.markdown(f"**Ticket:** [{ticket_id or '—'}]({ticket_url})" if ticket_url else f"**Ticket:** {ticket_id or '—'}")
+    m2.markdown(f"**Renter/Host:** {entry.get('renter_host') or '—'}")
+    m3.markdown(f"**Concern type:** {', '.join(entry.get('concern_types') or []) or '—'}")
+
+    if ticket_id and st.button("View full ticket conversation"):
+        ss["log_open_ticket_id"] = ticket_id
+        ss["log_open_audit_key"] = None
+        st.rerun()
+
+    st.divider()
+    st.subheader("Scoring breakdown")
+    scores = entry.get("scores") or {}
+    remarks = entry.get("remarks") or {}
+    breakdown_rows = [
+        {
+            "Category": r["name"],
+            "Score": scores.get(r["key"], "—"),
+            "Max": r["max"],
+            "Remarks": remarks.get(r["key"]) or "",
+        }
+        for r in RUBRIC
+    ]
+    st.dataframe(pd.DataFrame(breakdown_rows), use_container_width=True, hide_index=True)
+
+    st.subheader("Critical errors")
+    crit = entry.get("critical_errors") or {}
+    flagged = [c["label"] for c in CRITICAL_ERRORS if crit.get(c["key"])]
+    if flagged:
+        for label in flagged:
+            st.error(f"🚫 {label}")
+    else:
+        st.caption("None flagged.")
+
+    st.subheader("Overall comments")
+    st.write(entry.get("overall_comments") or "—")
+
     st.stop()
 
 st.title("QA Log")
@@ -192,32 +262,39 @@ for e in entries:
 filtered.sort(key=lambda e: (e.get("qa_date") or "", e.get("updated_at") or ""), reverse=True)
 
 if filtered:
+    st.caption("Click a row to see that audit's scores and feedback. Click the ticket number to open it in Intercom.")
     table_rows = [
         {
             "Date": e.get("qa_date", ""),
             "Agent": e.get("agent_name", ""),
+            "Ticket": e.get("ticket_link") or (conversation_url(e.get("ticket_id")) if e.get("ticket_id") else None),
             "Concern": ", ".join(e.get("concern_types") or []),
             "Total": e.get("total_score"),
             "Result": e.get("result", ""),
             "Reviewer": e.get("qa_reviewer", ""),
             "Test": "🧪" if e.get("is_test") else "",
-            "_ticket_id": e.get("ticket_id") or e.get("id"),
+            "_key": _entry_key(e),
         }
         for e in filtered[:300]
     ]
     df = pd.DataFrame(table_rows)
     event = st.dataframe(
-        df.drop(columns=["_ticket_id"]),
+        df.drop(columns=["_key"]),
         use_container_width=True,
         hide_index=True,
         on_select="rerun",
         selection_mode="single-row",
+        column_config={
+            "Ticket": st.column_config.LinkColumn(
+                "Ticket", display_text=r".*/conversation/(\d+)$", width="small"
+            ),
+        },
     )
     if len(filtered) > 300:
         st.caption(f"Showing the most recent 300 of {len(filtered)} matching audits.")
     selected = event.selection.rows if hasattr(event, "selection") else []
     if selected:
-        ss["log_open_ticket_id"] = table_rows[selected[0]]["_ticket_id"]
+        ss["log_open_audit_key"] = table_rows[selected[0]]["_key"]
         st.rerun()
 else:
     st.caption("No audits match these filters yet.")
