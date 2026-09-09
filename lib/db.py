@@ -97,6 +97,21 @@ def list_reviewed() -> dict:
         return {}
 
 
+def delete_reviewed(ticket_id: str) -> str | None:
+    """Clears one ticket's reviewed flag. Returns None on success, or an
+    error message. Used only by the QA Log's Weng-only "Delete a QA entry"
+    tool, since a reviewed flag (set separately from scoring, via "Mark
+    reviewed") is what actually keeps a ticket from being pulled again."""
+    db = get_client()
+    if not db:
+        return "Database is not connected — check the Supabase URL/key in Secrets."
+    try:
+        db.table("reviewed").delete().eq("id", str(ticket_id)).execute()
+        return None
+    except Exception as e:
+        return str(e)
+
+
 # ---------- qa_entries ----------
 
 def get_qa_entry(ticket_id: str) -> dict | None:
@@ -118,6 +133,21 @@ def save_qa_entry(ticket_id: str, entry: dict) -> None:
     row = dict(entry)
     row["id"] = str(ticket_id)
     db.table("qa_entries").upsert(row).execute()
+
+
+def delete_qa_entry(ticket_id: str) -> str | None:
+    """Deletes one qa_entries row. Returns None on success, or an error
+    message. Used only by the QA Log's Weng-only "Delete a QA entry" tool —
+    e.g. a test audit accidentally logged against a real ticket, so that
+    ticket can be pulled and scored for real."""
+    db = get_client()
+    if not db:
+        return "Database is not connected — check the Supabase URL/key in Secrets."
+    try:
+        db.table("qa_entries").delete().eq("id", str(ticket_id)).execute()
+        return None
+    except Exception as e:
+        return str(e)
 
 
 @st.cache_data(ttl=15, show_spinner=False)
