@@ -39,16 +39,120 @@ def fmt_date_short(epoch_seconds) -> str:
     return datetime.fromtimestamp(epoch_seconds).strftime("%b %-d, %Y")
 
 
-RESULT_COLORS = {
-    "PASS": "🟢",
-    "COACHING": "🟡",
-    "FAIL": "🔴",
-    "AUTO FAIL": "⛔",
+# ---------- app-wide look ("Charge Point": bright card-grid, green accent) ----------
+# Streamlit's own [theme] section in .streamlit/config.toml sets the base
+# colors (background/surface/text/accent) so they're consistent even before
+# the page finishes loading; this CSS layers on the parts config.toml can't
+# reach — the two Google Fonts, rounded stat-tile cards, the sidebar's
+# active-page rail, and the pill-shaped result badges used by
+# result_badge_md() below. Call inject_style() once near the top of every
+# page, right after st.set_page_config().
+_STYLE_BLOCK = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Public+Sans:wght@400;500;600&display=swap');
+
+:root {
+    --qa-accent: #14a173;
+    --qa-accent-soft: #e4f6ee;
+    --qa-coach: #d69a34;
+    --qa-coach-soft: #fbf0dd;
+    --qa-fail: #cf4a5c;
+    --qa-fail-soft: #fbe6e8;
+    --qa-muted: #5c6f66;
+}
+
+.stApp {
+    font-family: 'Public Sans', system-ui, -apple-system, sans-serif !important;
+}
+.stApp code, .stApp pre, .stApp kbd, .stApp samp {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+}
+.stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6 {
+    font-family: 'Sora', system-ui, sans-serif !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.01em;
+}
+
+/* ---- stat tiles (st.metric) ---- */
+div[data-testid="stMetric"] {
+    background-color: #ffffff;
+    border: 1px solid rgba(20, 32, 27, 0.12);
+    border-radius: 14px;
+    padding: 14px 18px 12px 18px;
+}
+div[data-testid="stMetricLabel"] p {
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--qa-muted);
+}
+div[data-testid="stMetricValue"] {
+    font-family: 'Sora', system-ui, sans-serif !important;
+}
+div[data-testid="stMetricValue"] p {
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---- sidebar: highlight the current page with a green rail ---- */
+[data-testid="stSidebarNavLink"] {
+    border-radius: 8px;
+}
+[data-testid="stSidebarNavLink"][aria-current="page"] {
+    background-color: var(--qa-accent-soft) !important;
+    position: relative;
+}
+[data-testid="stSidebarNavLink"][aria-current="page"]::before {
+    content: "";
+    position: absolute;
+    left: -8px;
+    top: 6px;
+    bottom: 6px;
+    width: 3px;
+    border-radius: 2px;
+    background: var(--qa-accent);
+}
+[data-testid="stSidebarNavLink"][aria-current="page"] span,
+[data-testid="stSidebarNavLink"][aria-current="page"] p {
+    color: var(--qa-accent) !important;
+}
+
+/* ---- result pills — see result_badge_md() ---- */
+.qa-chip {
+    display: inline-block;
+    font-family: 'Public Sans', system-ui, sans-serif;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 3px 11px;
+    border-radius: 999px;
+    line-height: 1.6;
+    white-space: nowrap;
+}
+.qa-chip-pass { background: var(--qa-accent-soft); color: var(--qa-accent); }
+.qa-chip-coaching { background: var(--qa-coach-soft); color: var(--qa-coach); }
+.qa-chip-fail { background: var(--qa-fail-soft); color: var(--qa-fail); }
+</style>
+"""
+
+
+def inject_style() -> None:
+    """Applies the app's look — fonts, stat-tile cards, sidebar active-page
+    rail, result pills. Call once near the top of every page, right after
+    st.set_page_config()."""
+    st.markdown(_STYLE_BLOCK, unsafe_allow_html=True)
+
+
+_RESULT_CHIP_CLASS = {
+    "PASS": "qa-chip-pass",
+    "COACHING": "qa-chip-coaching",
+    "FAIL": "qa-chip-fail",
+    "AUTO FAIL": "qa-chip-fail",
 }
 
 
 def result_badge_md(result: str) -> str:
-    return f"{RESULT_COLORS.get(result, '')} **{result}**"
+    """Returns an HTML pill for a QA result — pass unsafe_allow_html=True to
+    whichever st.markdown() call renders it."""
+    css_class = _RESULT_CHIP_CLASS.get(result, "qa-chip-coaching")
+    return f'<span class="qa-chip {css_class}">{result or "—"}</span>'
 
 
 def render_transcript(entries: list[dict]) -> None:
