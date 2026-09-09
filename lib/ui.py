@@ -122,6 +122,26 @@ def inject_style() -> None:
     st.markdown(_STYLE_BLOCK, unsafe_allow_html=True)
 
 
+# Tickets in this app are always Intercom conversations, so the Intercom
+# mark stands in for the old ticket emoji — as the browser-tab favicon
+# (page_icon=ui.LOGO_URL) and inline in page headings via page_heading()
+# below. Streamlit's sidebar nav icons only accept an emoji or a built-in
+# Material icon, not an arbitrary image, so app.py keeps a plain emoji
+# there instead.
+LOGO_URL = "https://cdn.simpleicons.org/intercom"
+
+
+def page_heading(text: str) -> None:
+    """Renders a page's <h1> heading with the Intercom logo inline in place
+    of the old ticket emoji."""
+    st.markdown(
+        f'<h1 style="display:flex;align-items:center;gap:0.35em;">'
+        f'<img src="{LOGO_URL}" alt="Intercom" style="height:1em;width:1em;border-radius:0.2em;">'
+        f"{text}</h1>",
+        unsafe_allow_html=True,
+    )
+
+
 _RESULT_CHIP_CLASS = {
     "PASS": "qa-chip-pass",
     "COACHING": "qa-chip-coaching",
