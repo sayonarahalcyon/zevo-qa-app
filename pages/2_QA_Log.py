@@ -5,13 +5,14 @@ from datetime import date, timedelta
 import pandas as pd
 import streamlit as st
 
-from lib import auth, db, sheets_backup
+from lib import auth, db, sheets_backup, ui
 from lib.constants import CRITICAL_ERRORS, DISPUTE_FORM_URL, RUBRIC, RUBRIC_GUIDE, is_excluded_agent_name
 from lib.intercom_client import IntercomError, conversation_url, get_conversation, list_admins
 from lib.ticket_view import render_ticket
 from lib.ui import result_badge_md
 
 st.set_page_config(page_title="QA Log — Ticket QA Sampler", page_icon="🎫", layout="wide")
+ui.inject_style()
 
 if not auth.is_signed_in():
     st.title("QA Log")
@@ -62,7 +63,7 @@ if ss.get("log_open_audit_key"):
 
     st.title(f"QA Audit — {entry.get('agent_name') or 'Unknown agent'}")
     b1, b2, b3 = st.columns([2, 2, 3])
-    b1.markdown(result_badge_md(entry.get("result", "")))
+    b1.markdown(result_badge_md(entry.get("result", "")), unsafe_allow_html=True)
     b2.markdown(f"**{entry.get('total_score', '—')} / 100**")
     b3.caption(
         f"Reviewed by {entry.get('qa_reviewer') or '—'} · {entry.get('qa_date') or '—'}"
@@ -387,7 +388,7 @@ if filtered:
         c3.markdown(f"[{ticket_id}]({ticket_url})" if ticket_url else (ticket_id or "—"))
         c4.write(", ".join(e.get("concern_types") or []) or "—")
         c5.write(e.get("total_score") if e.get("total_score") is not None else "—")
-        c6.markdown(result_badge_md(e.get("result", "")))
+        c6.markdown(result_badge_md(e.get("result", "")), unsafe_allow_html=True)
         c7.write(e.get("qa_reviewer", "") or "—")
         c8.write("🧪" if e.get("is_test") else "")
         c9.write("🚩" if e.get("is_escalated") else "")
