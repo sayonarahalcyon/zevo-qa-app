@@ -34,7 +34,7 @@ import streamlit as st
 
 from lib.constants import RUBRIC
 
-RUBRIC_HEADERS = [r["name"] for r in RUBRIC]
+RUBRIC_HEADERS = [h for r in RUBRIC for h in (r["name"], f"{r['name']} Remarks")]
 
 HEADER = [
     "Saved At",
@@ -97,13 +97,14 @@ def backup_qa_entry(ticket_id: str, entry: dict) -> None:
         return
     try:
         entry_scores = entry.get("scores") or {}
+        entry_remarks = entry.get("remarks") or {}
         row = [
             entry.get("updated_at", ""),
             str(ticket_id),
             entry.get("agent_name", ""),
             entry.get("qa_date", ""),
             entry.get("qa_reviewer", ""),
-            *[entry_scores.get(r["key"], "") for r in RUBRIC],
+            *[v for r in RUBRIC for v in (entry_scores.get(r["key"], ""), entry_remarks.get(r["key"], ""))],
             entry.get("total_score", ""),
             entry.get("result", ""),
             ", ".join(entry.get("concern_types") or []),
