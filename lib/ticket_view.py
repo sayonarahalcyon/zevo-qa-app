@@ -59,8 +59,9 @@ def render_ticket(convo: dict, ticket_url: str, on_pick_another=None, default_es
             db.clear_cache()
             st.rerun()
 
-    with st.container(border=True):
-        render_transcript(build_transcript(convo))
+    transcript_entries = build_transcript(convo)
+    with st.expander(f"💬 Conversation ({len(transcript_entries)} messages)", expanded=False):
+        render_transcript(transcript_entries)
 
     seen = learn_agents_from_conversation(convo)
     guessed_agent = next((n for aid, n in seen.items() if str(aid) == str(convo.get("admin_assignee_id"))), "")
