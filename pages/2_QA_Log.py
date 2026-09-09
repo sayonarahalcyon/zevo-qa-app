@@ -276,6 +276,68 @@ if auth.current_reviewer() == "Weng Yee":
                 )
             st.rerun()
 
+# ---------- delete a QA entry ----------
+# Visible only to Weng — same reasoning as the two sections above. Deleting
+# the qa_entries row alone isn't always enough to make a ticket pullable
+# again: if "Mark reviewed" was also clicked on it, that separate reviewed
+# flag is what actually excludes it from Weekly QA Batch and (by default)
+# Quick Sample, so this clears both.
+if auth.current_reviewer() == "Weng Yee":
+    delete_msg = ss.pop("_delete_entry_msg", None)
+    if delete_msg:
+        kind, text = delete_msg
+        (st.success if kind == "ok" else st.error)(text)
+
+    with st.expander("Delete a QA entry"):
+        st.caption(
+            "Removes a ticket's QA audit and reviewed flag so it can be pulled and scored "
+            "again — for something like a test audit accidentally logged against a real "
+            "ticket. This can't be undone."
+        )
+        del_ticket_id = st.text_input(
+            "Ticket ID", key="delete_entry_ticket_id", placeholder="e.g. 215475740134981"
+        ).strip()
+        del_entry = db.get_qa_entry(del_ticket_id) if del_ticket_id else None
+        del_reviewed_row = db.list_reviewed().get(del_ticket_id) if del_ticket_id else None
+
+        if del_ticket_id and not del_entry and not del_reviewed_row:
+            st.caption("No QA entry or reviewed flag found for that ticket ID.")
+        elif del_entry or del_reviewed_row:
+            if del_entry:
+                st.markdown(
+                    f"**Found QA entry:** {del_entry.get('agent_name') or 'Unknown agent'} · "
+                    f"{del_entry.get('total_score', '—')} / 100 ({del_entry.get('result', '—')}) · "
+                    f"reviewed by {del_entry.get('qa_reviewer') or '—'} on {del_entry.get('qa_date') or '—'}"
+                    + (" · 🧪 TEST" if del_entry.get("is_test") else "")
+                )
+            else:
+                st.caption("No QA entry for that ticket ID, but it does have a reviewed flag set.")
+            if del_reviewed_row:
+                st.caption('Also marked "reviewed" — that flag is what excludes it from future pulls.')
+
+            confirm = st.checkbox(
+                "Yes, delete this — I understand it can't be undone.", key="delete_entry_confirm"
+            )
+            if st.button("Delete", type="primary", disabled=not confirm, key="delete_entry_button"):
+                errors = []
+                if del_entry:
+                    err = db.delete_qa_entry(del_ticket_id)
+                    if err:
+                        errors.append(f"QA entry: {err}")
+                if del_reviewed_row:
+                    err = db.delete_reviewed(del_ticket_id)
+                    if err:
+                        errors.append(f"Reviewed flag: {err}")
+                db.clear_cache()
+                if errors:
+                    ss["_delete_entry_msg"] = ("error", "Deleted, but with issues — " + "; ".join(errors))
+                else:
+                    ss["_delete_entry_msg"] = (
+                        "ok",
+                        f"Deleted ticket #{del_ticket_id} — it's eligible to be pulled and scored again.",
+                    )
+                st.rerun()
+
 # ---------- dashboard ----------
 # Entries flagged "🧪 Mark as a test audit" in the form are excluded from
 # these totals and the per-agent rollup below, so a test submission never
