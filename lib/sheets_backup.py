@@ -93,8 +93,36 @@ def _ensure_header(ws) -> None:
     values = ws.get_all_values()
     if not values:
         ws.append_row(HEADER)
+        ws.set_basic_filter()
     elif values[0] != HEADER:
         ws.update("A1", [HEADER])
+        ws.set_basic_filter()
+
+
+def _entry_to_row(ticket_id: str, entry: dict) -> list:
+    """Builds one backup-sheet row from a qa_entries record. Shared by
+    backup_qa_entry() (one row per save) and resync_all_entries() (a full
+    rebuild), so the two paths can never drift apart."""
+    entry_scores = entry.get("scores") or {}
+    entry_remarks = entry.get("remarks") or {}
+    return [
+        entry.get("updated_at", ""),
+        str(ticket_id),
+        entry.get("agent_name", ""),
+        entry.get("qa_date", ""),
+        entry.get("qa_reviewer", ""),
+        *[v for r in RUBRIC for v in (entry_scores.get(r["key"], ""), entry_remarks.get(r["key"], ""))],
+        entry.get("total_score", ""),
+        entry.get("result", ""),
+        ", ".join(entry.get("concern_types") or []),
+        entry.get("renter_host", ""),
+        ", ".join(k for k, v in (entry.get("critical_errors") or {}).items() if v),
+        entry.get("overall_comments", ""),
+        entry.get("ticket_link", ""),
+        entry.get("zomp_link", ""),
+        "TEST" if entry.get("is_test") else "",
+        "ESCALATED" if entry.get("is_escalated") else "",
+    ]
 
 
 def backup_qa_entry(ticket_id: str, entry: dict) -> None:
@@ -105,26 +133,29 @@ def backup_qa_entry(ticket_id: str, entry: dict) -> None:
         return
     try:
         _ensure_header(ws)
-        entry_scores = entry.get("scores") or {}
-        entry_remarks = entry.get("remarks") or {}
-        row = [
-            entry.get("updated_at", ""),
-            str(ticket_id),
-            entry.get("agent_name", ""),
-            entry.get("qa_date", ""),
-            entry.get("qa_reviewer", ""),
-            *[v for r in RUBRIC for v in (entry_scores.get(r["key"], ""), entry_remarks.get(r["key"], ""))],
-            entry.get("total_score", ""),
-            entry.get("result", ""),
-            ", ".join(entry.get("concern_types") or []),
-            entry.get("renter_host", ""),
-            ", ".join(k for k, v in (entry.get("critical_errors") or {}).items() if v),
-            entry.get("overall_comments", ""),
-            entry.get("ticket_link", ""),
-            entry.get("zomp_link", ""),
-            "TEST" if entry.get("is_test") else "",
-            "ESCALATED" if entry.get("is_escalated") else "",
-        ]
-        ws.append_row(row, table_range="A1")
+        ws.append_row(_entry_to_row(ticket_id, entry), table_range="A1")
     except Exception:
         pass
+
+
+def resync_all_entries(entries: list) -> tuple:
+    """Wipes the backup sheet and rewrites it from scratch using the given
+    Supabase qa_entries rows. This is how audits saved while the sheet's
+    layout was out of date (or before it was configured at all) end up
+    backed up too. Supabase remains the source of truth throughout — this
+    only rebuilds the mirror. Returns (rows_written, error_message); the
+    error is None on success."""
+    ws = _get_worksheet()
+    if not ws:
+        return 0, "Backup sheet isn't configured (missing secrets)."
+    try:
+        ordered = sorted(entries, key=lambda e: e.get("updated_at") or e.get("created_at") or "")
+        rows = [_entry_to_row(e.get("ticket_id") or e.get("id"), e) for e in ordered]
+        ws.clear()
+        ws.append_row(HEADER)
+        if rows:
+            ws.append_rows(rows, table_range="A1")
+        ws.set_basic_filter()
+        return len(rows), None
+    except Exception as exc:
+        return 0, str(exc)
