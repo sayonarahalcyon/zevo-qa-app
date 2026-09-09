@@ -15,16 +15,16 @@ from lib import auth, db, sampling, ui
 from lib.intercom_client import IntercomError, conversation_url, get_conversation, search_conversations
 from lib.ticket_view import render_ticket
 
-st.set_page_config(page_title="Weekly QA Batch — Ticket QA Sampler", page_icon="🎫", layout="wide")
+st.set_page_config(page_title="Weekly QA Batch — Ticket QA Sampler", page_icon="🎟️", layout="wide")
 ui.inject_style()
 
 if not auth.is_signed_in():
-    st.title("🎫 Weekly QA Batch")
+    st.title("🎟️ Weekly QA Batch")
     st.warning("Sign in to pull and score tickets. Head to Home and sign in as one of the three reviewers.")
     st.page_link("pages/0_Home.py", label="🏠 Go to Home to sign in", use_container_width=False)
     st.stop()
 
-st.title("🎫 Ticket Selection")
+st.title("🎟️ Ticket Selection")
 st.caption(f"Reviewing as **{auth.current_reviewer()}**")
 
 st.write("")
