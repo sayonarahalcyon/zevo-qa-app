@@ -5,7 +5,7 @@ from datetime import date, timedelta
 import pandas as pd
 import streamlit as st
 
-from lib import auth, db
+from lib import auth, db, sheets_backup
 from lib.constants import CRITICAL_ERRORS, DISPUTE_FORM_URL, RUBRIC, RUBRIC_GUIDE, is_excluded_agent_name
 from lib.intercom_client import IntercomError, conversation_url, get_conversation, list_admins
 from lib.ticket_view import render_ticket
@@ -180,6 +180,30 @@ with st.expander("Manage agents"):
                 db.clear_cache()
                 ss["_agent_sync_msg"] = ("ok", f"Added {new_name.strip()}.")
                 st.rerun()
+
+# ---------- backup sheet ----------
+backup_msg = ss.pop("_backup_sync_msg", None)
+if backup_msg:
+    kind, text = backup_msg
+    (st.success if kind == "ok" else st.error)(text)
+
+with st.expander("Backup sheet"):
+    st.caption(
+        "New audits are mirrored to the Google Sheet backup automatically. Use this to "
+        "rebuild the whole sheet from Supabase — for entries saved while the backup "
+        "sheet's layout was out of date, or before it was configured. It also turns on "
+        "column filters (Result, Escalated, Agent, Date, etc.) on the sheet."
+    )
+    if st.button("Resync all audits to backup sheet", use_container_width=True):
+        count, err = sheets_backup.resync_all_entries(entries)
+        if err:
+            ss["_backup_sync_msg"] = ("error", f"Could not resync the backup sheet: {err}")
+        else:
+            ss["_backup_sync_msg"] = (
+                "ok",
+                f"Resynced {count} audit(s) to the backup sheet and turned on column filters.",
+            )
+        st.rerun()
 
 # ---------- dashboard ----------
 # Entries flagged "🧪 Mark as a test audit" in the form are excluded from
