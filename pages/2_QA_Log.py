@@ -243,10 +243,11 @@ st.divider()
 
 # ---------- filterable audit log ----------
 st.subheader("Audit log")
-f1, f2, f3 = st.columns(3)
+f1, f2, f3, f4 = st.columns([1, 1, 1.3, 1.6])
 agent_filter = f1.selectbox("Agent", ["All agents"] + sorted(agents_by_id.values()))
 result_filter = f2.selectbox("Result", ["All results", "PASS", "COACHING", "FAIL", "AUTO FAIL"])
 q_filter = f3.text_input("Search concern / comments…")
+date_range = f4.date_input("Date range", value=(), format="YYYY-MM-DD")
 
 filtered = []
 for e in entries:
@@ -257,6 +258,10 @@ for e in entries:
     if q_filter:
         hay = f"{e.get('agent_name','')} {' '.join(e.get('concern_types') or [])} {e.get('overall_comments','')}".lower()
         if q_filter.lower() not in hay:
+            continue
+    if len(date_range) == 2:
+        qa_date = e.get("qa_date") or ""
+        if not (date_range[0].isoformat() <= qa_date <= date_range[1].isoformat()):
             continue
     filtered.append(e)
 filtered.sort(key=lambda e: (e.get("qa_date") or "", e.get("updated_at") or ""), reverse=True)
