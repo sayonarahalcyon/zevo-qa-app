@@ -6,6 +6,7 @@ none of the ticket-selection controls or pull logic run.
 """
 
 import random
+import re
 from datetime import date, timedelta
 
 import streamlit as st
@@ -274,15 +275,59 @@ with col_quick:
             )
 
 st.write("")
+
+# ---------- Manually log a ticket (escalated) ----------
+# For tickets spotted directly in Intercom — a complaint, an escalation,
+# something a TL flags — rather than surfaced by the random Weekly QA batch
+# or Quick Sample pulls above. Scored with the same form as any other
+# ticket; the only difference is it's auto-flagged "🚩 Escalated" (still
+# editable) so it's easy to tell apart in the QA Log.
+with st.container(border=True):
+    st.subheader("🚩 Manually log a ticket")
+    st.caption(
+        "Noticed something in Intercom that needs a QA look — outside the random pull? "
+        "Paste the ticket ID or its Intercom link below."
+    )
+    ss.setdefault("manual_open_ticket_id", None)
+    mc1, mc2 = st.columns([4, 1])
+    manual_raw = mc1.text_input(
+        "Ticket ID or Intercom link",
+        key="manual_ticket_input",
+        label_visibility="collapsed",
+        placeholder="e.g. 215475815894618 or an Intercom conversation link",
+    )
+    if mc2.button("Load ticket", use_container_width=True, key="manual_load_button"):
+        digits = re.findall(r"\d+", manual_raw or "")
+        manual_id = digits[-1] if digits else ""
+        if not manual_id:
+            st.error("Couldn't find a ticket ID in that — paste the numeric ID or the full Intercom link.")
+        else:
+            ss["manual_open_ticket_id"] = manual_id
+            ss["batch_open_ticket_id"] = None
+            ss["qs_current_ticket_id"] = None
+            st.rerun()
+
+st.write("")
 st.divider()
 
 # ---------- main stage ----------
-# Quick Sample takes priority if a ticket is loaded there (it's the more
-# recently-touched of the two tools whenever both have something pulled).
+# Manually-logged tickets take priority (an explicit just-now action),
+# then Quick Sample if a ticket is loaded there, then the weekly batch.
+manual_ticket_id = ss.get("manual_open_ticket_id")
 qs_ticket_id = ss.get("qs_current_ticket_id")
 open_id = ss.get("batch_open_ticket_id")
 
-if qs_ticket_id:
+if manual_ticket_id:
+    if st.button("← Back to manual entry"):
+        ss["manual_open_ticket_id"] = None
+        st.rerun()
+    try:
+        with st.spinner(f"Loading conversation #{manual_ticket_id}…"):
+            convo = get_conversation(manual_ticket_id)
+        render_ticket(convo, conversation_url(manual_ticket_id), default_escalated=True)
+    except IntercomError as e:
+        st.error(f"Could not load conversation #{manual_ticket_id}: {e}")
+elif qs_ticket_id:
     try:
         with st.spinner(f"Loading conversation #{qs_ticket_id}…"):
             convo = get_conversation(qs_ticket_id)
