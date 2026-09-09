@@ -47,6 +47,7 @@ HEADER = [
     "Ticket Link",
     "ZOMP Link",
     "Test",
+    "Escalated",
 ]
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -99,6 +100,7 @@ def backup_qa_entry(ticket_id: str, entry: dict) -> None:
             entry.get("ticket_link", ""),
             entry.get("zomp_link", ""),
             "TEST" if entry.get("is_test") else "",
+            "ESCALATED" if entry.get("is_escalated") else "",
         ]
         ws.append_row(row)
     except Exception:
