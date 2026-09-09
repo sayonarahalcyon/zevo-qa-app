@@ -116,6 +116,6 @@ def backup_qa_entry(ticket_id: str, entry: dict) -> None:
             "TEST" if entry.get("is_test") else "",
             "ESCALATED" if entry.get("is_escalated") else "",
         ]
-        ws.append_row(row)
+        ws.append_row(row, table_range="A1")
     except Exception:
         pass
