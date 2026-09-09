@@ -62,7 +62,13 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 def _connect_worksheet():
     """Cached only on success (same pattern as lib/db.py's Supabase client)
     so a transient failure — or secrets not filled in yet — gets retried on
-    the next call instead of being stuck as a cached None forever."""
+    the next call instead of being stuck as a cached None forever.
+
+    Deliberately does NOT check the header row — this connection is cached
+    for the lifetime of the app process, so a check made only here would
+    silently go stale the moment someone edits the sheet by hand (clearing
+    rows, say) without the app also restarting. See _ensure_header(), which
+    runs on every save instead."""
     import gspread
     from google.oauth2.service_account import Credentials
 
@@ -70,16 +76,7 @@ def _connect_worksheet():
     sheet_id = st.secrets["qa_backup_sheet_id"]
     creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
     gc = gspread.authorize(creds)
-    ws = gc.open_by_key(sheet_id).sheet1
-    values = ws.get_all_values()
-    if not values:
-        ws.append_row(HEADER)
-    elif values[0] != HEADER:
-        # Layout changed (e.g. rubric columns added) — fix the header row in
-        # place. Rows already appended under the old header are left as-is;
-        # only new saves after this point fill the new columns.
-        ws.update("A1", [HEADER])
-    return ws
+    return gc.open_by_key(sheet_id).sheet1
 
 
 def _get_worksheet():
@@ -89,6 +86,17 @@ def _get_worksheet():
         return None
 
 
+def _ensure_header(ws) -> None:
+    """Checked on every save, not cached — so a header missing or out of
+    date (a manual edit to the sheet, or a layout change) gets repaired on
+    the very next save rather than only once per app restart."""
+    values = ws.get_all_values()
+    if not values:
+        ws.append_row(HEADER)
+    elif values[0] != HEADER:
+        ws.update("A1", [HEADER])
+
+
 def backup_qa_entry(ticket_id: str, entry: dict) -> None:
     """Appends one row mirroring a saved QA audit. Never raises — a backup
     failure must not block or roll back the real save to Supabase."""
@@ -96,6 +104,7 @@ def backup_qa_entry(ticket_id: str, entry: dict) -> None:
     if not ws:
         return
     try:
+        _ensure_header(ws)
         entry_scores = entry.get("scores") or {}
         entry_remarks = entry.get("remarks") or {}
         row = [
