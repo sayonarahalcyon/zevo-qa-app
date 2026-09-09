@@ -48,6 +48,9 @@ create table if not exists qa_entries (
     is_test                boolean not null default false,  -- flagged via the "Mark as test audit" checkbox;
                                                               -- excluded from the QA Log's dashboard totals and
                                                               -- per-agent rollup, but still visible in the audit log
+    is_escalated           boolean not null default false,  -- flagged via "Mark as escalated" or auto-set when the
+                                                              -- ticket came from "Manually log a ticket" (as opposed
+                                                              -- to the random Weekly QA batch / Quick Sample pulls)
     created_at             timestamptz not null default now(),
     updated_at             timestamptz not null default now()
 );
