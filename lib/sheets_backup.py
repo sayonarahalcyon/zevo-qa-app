@@ -32,12 +32,17 @@ real save to Supabase (the source of truth) never depends on this.
 
 import streamlit as st
 
+from lib.constants import RUBRIC
+
+RUBRIC_HEADERS = [r["name"] for r in RUBRIC]
+
 HEADER = [
     "Saved At",
     "Ticket ID",
     "Agent",
     "QA Date",
     "Reviewer",
+    *RUBRIC_HEADERS,
     "Total Score",
     "Result",
     "Concern Types",
@@ -66,8 +71,14 @@ def _connect_worksheet():
     creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
     gc = gspread.authorize(creds)
     ws = gc.open_by_key(sheet_id).sheet1
-    if not ws.get_all_values():
+    values = ws.get_all_values()
+    if not values:
         ws.append_row(HEADER)
+    elif values[0] != HEADER:
+        # Layout changed (e.g. rubric columns added) — fix the header row in
+        # place. Rows already appended under the old header are left as-is;
+        # only new saves after this point fill the new columns.
+        ws.update("A1", [HEADER])
     return ws
 
 
@@ -85,12 +96,14 @@ def backup_qa_entry(ticket_id: str, entry: dict) -> None:
     if not ws:
         return
     try:
+        entry_scores = entry.get("scores") or {}
         row = [
             entry.get("updated_at", ""),
             str(ticket_id),
             entry.get("agent_name", ""),
             entry.get("qa_date", ""),
             entry.get("qa_reviewer", ""),
+            *[entry_scores.get(r["key"], "") for r in RUBRIC],
             entry.get("total_score", ""),
             entry.get("result", ""),
             ", ".join(entry.get("concern_types") or []),
