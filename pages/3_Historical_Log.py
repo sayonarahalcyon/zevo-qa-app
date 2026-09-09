@@ -9,10 +9,12 @@ skews current metrics. New audits are logged in the QA Log page, not here.
 import pandas as pd
 import streamlit as st
 
-from lib import auth, db
+from lib import auth, db, ui
 from lib.constants import RUBRIC
+from lib.ui import result_badge_md
 
 st.set_page_config(page_title="Historical Log — Ticket QA Sampler", page_icon="🗄️", layout="wide")
+ui.inject_style()
 
 if not auth.is_signed_in():
     st.title("Historical Log")
@@ -48,8 +50,10 @@ if ss.get("hist_open_id"):
         st.error("That entry couldn't be found.")
     else:
         st.subheader(f"{entry.get('agent_name', '')} — {entry.get('qa_date', '')}")
-        badge = {"PASS": "\U0001F7E2", "COACHING": "\U0001F7E1", "FAIL": "\U0001F534", "AUTO FAIL": "⛔"}.get(entry.get("result"), "")
-        st.markdown(f"{badge} **{entry.get('result', '')}** · {entry.get('total_score', '—')} pts · reviewed by {entry.get('qa_reviewer') or '—'}")
+        st.markdown(
+            f"{result_badge_md(entry.get('result', ''))} &nbsp;·&nbsp; {entry.get('total_score', '—')} pts · reviewed by {entry.get('qa_reviewer') or '—'}",
+            unsafe_allow_html=True,
+        )
         st.caption(f"Source: {entry.get('source_tab', '')} tab · Concern: {', '.join(entry.get('concern_types') or []) or '—'} · Renter/Host: {entry.get('renter_host') or '—'}")
 
         link_cols = st.columns(2)
