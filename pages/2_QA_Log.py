@@ -11,7 +11,7 @@ from lib.intercom_client import IntercomError, conversation_url, get_conversatio
 from lib.ticket_view import render_ticket
 from lib.ui import result_badge_md
 
-st.set_page_config(page_title="QA Log — Ticket QA Sampler", page_icon="🎫", layout="wide")
+st.set_page_config(page_title="QA Log — Ticket QA Sampler", page_icon="🎟️", layout="wide")
 ui.inject_style()
 
 if not auth.is_signed_in():
