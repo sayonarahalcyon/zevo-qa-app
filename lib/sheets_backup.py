@@ -7,7 +7,12 @@ appended to on every save.
 
 Requires a Google Cloud service account with the Sheets API enabled, shared
 as an Editor on the target spreadsheet, with its key and the spreadsheet id
-in Streamlit secrets:
+in Streamlit secrets. qa_backup_sheet_id must be a top-level secret — in
+TOML, a key only stays top-level if nothing above it is a [section] header
+with no other top-level header in between, so the safest place for it is
+the very first line of the secrets file, before any [section]:
+
+    qa_backup_sheet_id = "the spreadsheet id from its URL"
 
     [gcp_service_account]
     type = "service_account"
@@ -20,8 +25,6 @@ in Streamlit secrets:
     token_uri = "https://oauth2.googleapis.com/token"
     auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
     client_x509_cert_url = "..."
-
-    qa_backup_sheet_id = "the spreadsheet id from its URL"
 
 Without those secrets configured, backup_qa_entry() silently no-ops — the
 real save to Supabase (the source of truth) never depends on this.
@@ -71,13 +74,6 @@ def _get_worksheet():
     try:
         return _connect_worksheet()
     except Exception:
-        # TEMPORARY diagnostic logging (2026-09-09) — print goes to the
-        # Streamlit Cloud app logs so we can see why the backup silently
-        # isn't writing. Remove once the Sheets backup is confirmed working.
-        import traceback
-
-        print("[sheets_backup] _connect_worksheet failed:")
-        traceback.print_exc()
         return None
 
 
@@ -86,7 +82,6 @@ def backup_qa_entry(ticket_id: str, entry: dict) -> None:
     failure must not block or roll back the real save to Supabase."""
     ws = _get_worksheet()
     if not ws:
-        print("[sheets_backup] backup_qa_entry: no worksheet, skipping row for ticket", ticket_id)
         return
     try:
         row = [
@@ -106,9 +101,5 @@ def backup_qa_entry(ticket_id: str, entry: dict) -> None:
             "TEST" if entry.get("is_test") else "",
         ]
         ws.append_row(row)
-        print("[sheets_backup] backup_qa_entry: appended row for ticket", ticket_id)
     except Exception:
-        import traceback
-
-        print("[sheets_backup] backup_qa_entry: append_row failed for ticket", ticket_id)
-        traceback.print_exc()
+        pass
