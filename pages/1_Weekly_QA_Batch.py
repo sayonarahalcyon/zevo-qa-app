@@ -95,6 +95,7 @@ with col_batch:
                     if st.button(t.get("topic") or f"#{t['id']}", key=f"slot_{i}", use_container_width=True):
                         ss["batch_open_ticket_id"] = t["id"]
                         ss["qs_current_ticket_id"] = None
+                        ss["manual_open_ticket_id"] = None
                         st.rerun()
                     st.caption(state)
                 else:
@@ -161,6 +162,7 @@ with col_batch:
                     if new_tickets:
                         ss["batch_open_ticket_id"] = new_tickets[0]["id"]
                         ss["qs_current_ticket_id"] = None
+                        ss["manual_open_ticket_id"] = None
                     st.rerun()
 
 # ---------- Quick Sample: pull one random ticket, any date range ----------
@@ -257,6 +259,7 @@ with col_quick:
 
         if st.button("Pull random ticket", type="primary", use_container_width=True, key="qs_pull_button"):
             ss["batch_open_ticket_id"] = None
+            ss["manual_open_ticket_id"] = None
             qs_pull_pool()
 
         if ss["qs_pool"]:
