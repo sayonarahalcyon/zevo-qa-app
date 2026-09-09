@@ -50,21 +50,36 @@ st.write("")
 st.write("")
 
 # ---------- stats ----------
+# Test audits (flagged "🧪 Mark as a test audit" in the form) are excluded
+# from these numbers so a test submission never skews the real ones — same
+# rule the QA Log dashboard uses. The counter row below breaks out both
+# counts so it's still obvious at a glance how many of each exist.
 entries = db.list_qa_entries()
-total = len(entries)
-if total:
-    score_sum = sum(e.get("total_score") or 0 for e in entries)
-    avg_score = round(score_sum / total, 1)
-    pass_count = sum(1 for e in entries if e.get("result") == "PASS")
-    pass_rate = round(pass_count / total * 100, 1)
-    week_start_iso = (date.today() - timedelta(days=7)).isoformat()
-    this_week = sum(1 for e in entries if (e.get("qa_date") or "") >= week_start_iso)
+real_entries = [e for e in entries if not e.get("is_test")]
+test_count = len(entries) - len(real_entries)
+total = len(real_entries)
+
+if entries:
+    if total:
+        score_sum = sum(e.get("total_score") or 0 for e in real_entries)
+        avg_score = round(score_sum / total, 1)
+        pass_count = sum(1 for e in real_entries if e.get("result") == "PASS")
+        pass_rate = round(pass_count / total * 100, 1)
+        week_start_iso = (date.today() - timedelta(days=7)).isoformat()
+        this_week = sum(1 for e in real_entries if (e.get("qa_date") or "") >= week_start_iso)
+    else:
+        avg_score = pass_rate = this_week = None
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Total Audits Logged", total)
-    c2.metric("Pass Rate", f"{pass_rate}%")
-    c3.metric("Avg Score", avg_score)
-    c4.metric("Logged This Week", this_week)
+    c2.metric("Pass Rate", f"{pass_rate}%" if pass_rate is not None else "—")
+    c3.metric("Avg Score", avg_score if avg_score is not None else "—")
+    c4.metric("Logged This Week", this_week if this_week is not None else "—")
+
+    st.write("")
+    s1, s2 = st.columns(2)
+    s1.metric("✅ Real Audits", total)
+    s2.metric("🧪 Test Audits", test_count)
 else:
     st.info("No QA audits logged yet. Sign in above and head to Weekly QA Batch to pull your first ticket.")
 
