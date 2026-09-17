@@ -65,6 +65,22 @@ def list_agents() -> list[dict]:
         return []
 
 
+def set_agent_password(agent_id: str, password_hash: str | None) -> str | None:
+    """Sets (or, passing None, clears) one agent's My Dashboard password
+    hash. Returns None on success, or an error message. Called from the QA
+    Log's "Manage agents" panel (a reviewer setting/resetting it) and from
+    lib.agent_auth.render_change_password() (an agent changing their own)."""
+    db = get_client()
+    if not db:
+        return "Database is not connected — check the Supabase URL/key in Secrets."
+    try:
+        db.table("agents").update({"password_hash": password_hash}).eq("id", str(agent_id)).execute()
+        list_agents.clear()
+        return None
+    except Exception as e:
+        return str(e)
+
+
 def delete_agent(agent_id: str) -> str | None:
     """Deletes one row from the agents directory. Returns None on success, or
     an error message. Used only by the QA Log's Weng-only "Manage agents"

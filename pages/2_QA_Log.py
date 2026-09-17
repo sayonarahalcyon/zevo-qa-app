@@ -5,7 +5,7 @@ from datetime import date, timedelta
 import pandas as pd
 import streamlit as st
 
-from lib import auth, db, sheets_backup, ui
+from lib import agent_auth, auth, db, sheets_backup, ui
 from lib.constants import CRITICAL_ERRORS, DISPUTE_FORM_URL, RUBRIC, RUBRIC_GUIDE, is_excluded_agent_name
 from lib.intercom_client import IntercomError, conversation_url, get_conversation, list_admins
 from lib.ticket_view import render_ticket
@@ -270,6 +270,36 @@ if auth.current_reviewer() == "Weng Yee":
                 else:
                     ss["_agent_sync_msg"] = ("ok", f"Removed {remove_agent['name']} from the agent directory.")
                 st.rerun()
+
+        st.markdown("**Set or reset an agent's dashboard password**")
+        st.caption(
+            "Lets that agent sign in on My Dashboard to see their own evaluations "
+            "(scores, trend, and your remarks) — read-only, no edit access. "
+            "They can change it themselves afterward."
+        )
+        pw_options = ["Select an agent..."] + [f'{a["name"]} ({a["id"]})' for a in removable]
+        pw_choice = st.selectbox("Agent", pw_options, key="set_pw_agent_select")
+        if pw_choice != "Select an agent...":
+            pw_agent = removable[pw_options.index(pw_choice) - 1]
+            has_pw = bool(pw_agent.get("password_hash"))
+            st.caption("Already has a password set — this replaces it." if has_pw else "No password set yet.")
+            new_pw1 = st.text_input("New password", type="password", key="set_pw_new")
+            new_pw2 = st.text_input("Confirm new password", type="password", key="set_pw_confirm")
+            if st.button("Set password", key="set_pw_button"):
+                if not new_pw1:
+                    st.error("Enter a password.")
+                elif new_pw1 != new_pw2:
+                    st.error("Passwords don't match.")
+                else:
+                    err = db.set_agent_password(pw_agent["id"], agent_auth.hash_password(new_pw1))
+                    if err:
+                        ss["_agent_sync_msg"] = ("error", f"Could not set password for {pw_agent['name']}: {err}")
+                    else:
+                        ss["_agent_sync_msg"] = (
+                            "ok",
+                            f"Password set for {pw_agent['name']} — they can now sign in on My Dashboard.",
+                        )
+                    st.rerun()
 
 # ---------- backup sheet ----------
 # Visible only to Weng — the other reviewers don't need this control, and a

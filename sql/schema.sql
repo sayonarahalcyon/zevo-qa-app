@@ -4,10 +4,13 @@
 -- table names match the original collections 1:1.
 
 create table if not exists agents (
-    id          text primary key,          -- Intercom admin id
-    name        text not null,
-    email       text,
-    updated_at  timestamptz not null default now()
+    id             text primary key,          -- Intercom admin id
+    name           text not null,
+    email          text,
+    password_hash  text,                      -- bcrypt hash for My Dashboard sign-in;
+                                                -- NULL until a reviewer sets one (see
+                                                -- QA Log → Manage agents)
+    updated_at     timestamptz not null default now()
 );
 
 create table if not exists reviewed (

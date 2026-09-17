@@ -12,6 +12,7 @@ home = st.Page("pages/0_Home.py", title="Home", icon="🏠", default=True)
 weekly = st.Page("pages/1_Weekly_QA_Batch.py", title="Weekly QA Batch", icon="📅")
 qa_log = st.Page("pages/2_QA_Log.py", title="QA Log", icon="📋")
 historical = st.Page("pages/3_Historical_Log.py", title="Historical Log", icon="🗄️")
+my_dashboard = st.Page("pages/4_My_Dashboard.py", title="My Dashboard", icon="🙋")
 
-pg = st.navigation([home, weekly, qa_log, historical])
+pg = st.navigation([home, weekly, qa_log, historical, my_dashboard])
 pg.run()
