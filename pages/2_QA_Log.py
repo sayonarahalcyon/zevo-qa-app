@@ -181,7 +181,9 @@ st.caption(f"Reviewing as **{auth.current_reviewer()}**")
 # just a link + open count here so it doesn't compete for space with the
 # rest of QA Log, but a reviewer still sees at a glance whether anything's
 # waiting on them.
-_open_dispute_count = sum(1 for d in db.list_disputes() if d.get("status") != "resolved")
+_open_dispute_count = sum(
+    1 for d in db.list_disputes() if d.get("status") != "resolved" and not d.get("is_test")
+)
 _qd_label = "❓ Questions & Disputes" + (f" — {_open_dispute_count} open" if _open_dispute_count else " — nothing open")
 st.page_link("pages/5_Questions_Disputes.py", label=_qd_label)
 

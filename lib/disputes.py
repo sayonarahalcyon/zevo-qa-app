@@ -105,8 +105,13 @@ def render_reviewer_panel() -> None:
         return
 
     entries_by_id = {e["id"]: e for e in db.list_qa_entries()}
-    open_count = sum(1 for d in disputes if d.get("status") != "resolved")
-    st.caption(f"{open_count} open · {len(disputes) - open_count} resolved")
+    real_disputes = [d for d in disputes if not d.get("is_test")]
+    test_count = len(disputes) - len(real_disputes)
+    open_count = sum(1 for d in real_disputes if d.get("status") != "resolved")
+    caption = f"{open_count} open · {len(real_disputes) - open_count} resolved"
+    if test_count:
+        caption += f" · {test_count} test"
+    st.caption(caption)
 
     ss = st.session_state
     for d in disputes:
@@ -116,6 +121,8 @@ def render_reviewer_panel() -> None:
         badge = "🟢 Resolved" if resolved else "🟡 Open"
         ticket_id = entry.get("ticket_id") or "—"
         label = f"{kind_label} · {d.get('agent_name') or '—'} · Ticket {ticket_id} · {badge}"
+        if d.get("is_test"):
+            label += " · 🧪 TEST"
 
         with st.expander(label):
             st.caption(

@@ -276,8 +276,14 @@ def create_dispute(
     message: str,
     categories: list[str] | None = None,
     supporting_evidence: str = "",
+    is_test: bool = False,
 ) -> str | None:
-    """Returns None on success, or an error message on failure."""
+    """Returns None on success, or an error message on failure. `is_test`
+    mirrors qa_entries.is_test — it isn't exposed as a checkbox on the agent
+    form (agents never intentionally submit a test dispute), but lets test
+    rows created directly (e.g. for demoing the feature) be excluded from
+    the Questions & Disputes open/resolved counts, same as test audits are
+    excluded from the QA Log's dashboard totals."""
     db = get_client()
     if not db:
         return "Database is not connected — check the Supabase URL/key in Secrets."
@@ -293,6 +299,7 @@ def create_dispute(
                 "message": message,
                 "supporting_evidence": supporting_evidence or "",
                 "status": "open",
+                "is_test": is_test,
             }
         ).execute()
         list_disputes.clear()

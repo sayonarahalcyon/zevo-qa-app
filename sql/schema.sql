@@ -102,6 +102,9 @@ create table if not exists disputes (
     reviewer_response    text,
     resolved_by          text,
     resolved_at          timestamptz,
+    is_test              boolean not null default false,  -- test rows (created directly, not
+                                                              -- via the agent form) excluded from
+                                                              -- the Questions & Disputes open/resolved counts
     created_at           timestamptz not null default now(),
     updated_at           timestamptz not null default now()
 );
