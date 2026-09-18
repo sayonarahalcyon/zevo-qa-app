@@ -15,6 +15,8 @@ reason "Dispute"), which keeps logging to qa_entries.edit_log exactly as
 before. render_reviewer_panel() links straight into that existing flow.
 """
 
+from datetime import date, datetime, timedelta
+
 import streamlit as st
 
 from lib import auth, db
@@ -96,9 +98,88 @@ def _render_existing(d: dict) -> None:
         st.info(f"**Reviewer response ({d.get('resolved_by') or '—'}):** {d.get('reviewer_response') or ''}")
 
 
+def _week_start(created_at: str | None) -> date | None:
+    """Monday of the week `created_at` falls in, or None if unparseable."""
+    if not created_at:
+        return None
+    try:
+        dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return dt.date() - timedelta(days=dt.weekday())
+
+
+def _group_by_week(disputes: list[dict]) -> list[tuple[date | None, list[dict]]]:
+    """Groups (already newest-first) disputes by the Monday of their week,
+    most recent week first. Each group keeps the incoming (newest-first)
+    order. Undated rows land in their own group, sorted last."""
+    groups: dict[date | None, list[dict]] = {}
+    for d in disputes:
+        groups.setdefault(_week_start(d.get("created_at")), []).append(d)
+    return sorted(groups.items(), key=lambda kv: kv[0] or date.min, reverse=True)
+
+
+def _render_dispute_row(d: dict, entries_by_id: dict, ss) -> None:
+    entry = entries_by_id.get(d.get("entry_id")) or {}
+    kind_label = "❓ Question" if d.get("request_type") == "question" else "⚖️ Dispute"
+    resolved = d.get("status") == "resolved"
+    badge = "🟢 Resolved" if resolved else "🟡 Open"
+    ticket_id = entry.get("ticket_id") or "—"
+    label = f"{kind_label} · {d.get('agent_name') or '—'} · Ticket {ticket_id} · {badge}"
+    if d.get("is_test"):
+        label += " · 🧪 TEST"
+
+    with st.expander(label):
+        st.caption(
+            f"Audit: {entry.get('qa_date', '—')} · {entry.get('result', '—')} · "
+            f"{entry.get('total_score', '—')}/100 · reviewed by {entry.get('qa_reviewer', '—')}"
+            if entry
+            else "The audit this was submitted about could not be found."
+        )
+        if entry.get("ticket_link"):
+            st.markdown(f"[Open ticket]({entry['ticket_link']})")
+        st.write(d.get("message", ""))
+        if d.get("categories"):
+            st.caption("Categories: " + ", ".join(d["categories"]))
+        if d.get("supporting_evidence"):
+            st.markdown(f"**Supporting evidence:** {d['supporting_evidence']}")
+
+        if entry.get("ticket_id") and d.get("request_type") == "dispute":
+            if st.button("Open this audit to edit the score", key=f"dispute_edit_{d['id']}"):
+                ss["log_open_ticket_id"] = entry["ticket_id"]
+                ss["log_open_audit_key"] = None
+                ss[f"qa_editing_{entry['ticket_id']}"] = True
+                st.switch_page("pages/2_QA_Log.py")
+            st.caption('Choose "Dispute" as the edit reason there to log it on the audit itself.')
+
+        if resolved:
+            st.success(f"Resolved by {d.get('resolved_by') or '—'} on {(d.get('resolved_at') or '')[:10]}")
+            st.write(d.get("reviewer_response") or "")
+            if st.button("Reopen", key=f"dispute_reopen_{d['id']}"):
+                err = db.reopen_dispute(d["id"])
+                if err:
+                    st.error(err)
+                else:
+                    st.rerun()
+        else:
+            response = st.text_area("Response to agent", key=f"dispute_response_{d['id']}")
+            if st.button("Mark resolved", key=f"dispute_resolve_{d['id']}"):
+                if not response.strip():
+                    st.error("Write a response before marking this resolved — the agent will see it.")
+                else:
+                    err = db.resolve_dispute(d["id"], response.strip(), auth.current_reviewer())
+                    if err:
+                        st.error(err)
+                    else:
+                        st.success("Marked resolved.")
+                        st.rerun()
+
+
 def render_reviewer_panel() -> None:
-    """Mounted on QA Log. Reviewer-only (same page gate — lib.auth), visible
-    to any signed-in reviewer, not just Weng."""
+    """Mounted on the Questions & Disputes page. Reviewer-only (same page
+    gate — lib.auth), visible to any signed-in reviewer, not just Weng.
+    Submissions are grouped by the week they came in (most recent first),
+    with an optional agent filter above the groups."""
     disputes = db.list_disputes()
     if not disputes:
         st.caption("No questions or disputes submitted yet.")
@@ -113,58 +194,22 @@ def render_reviewer_panel() -> None:
         caption += f" · {test_count} test"
     st.caption(caption)
 
+    agent_names = sorted({d.get("agent_name") for d in disputes if d.get("agent_name")})
+    agent_filter = st.selectbox(
+        "Filter by agent", ["All agents"] + agent_names, key="dispute_agent_filter"
+    )
+    filtered = (
+        disputes if agent_filter == "All agents"
+        else [d for d in disputes if d.get("agent_name") == agent_filter]
+    )
+    if not filtered:
+        st.caption(f"No questions or disputes from {agent_filter}.")
+        return
+
     ss = st.session_state
-    for d in disputes:
-        entry = entries_by_id.get(d.get("entry_id")) or {}
-        kind_label = "❓ Question" if d.get("request_type") == "question" else "⚖️ Dispute"
-        resolved = d.get("status") == "resolved"
-        badge = "🟢 Resolved" if resolved else "🟡 Open"
-        ticket_id = entry.get("ticket_id") or "—"
-        label = f"{kind_label} · {d.get('agent_name') or '—'} · Ticket {ticket_id} · {badge}"
-        if d.get("is_test"):
-            label += " · 🧪 TEST"
-
-        with st.expander(label):
-            st.caption(
-                f"Audit: {entry.get('qa_date', '—')} · {entry.get('result', '—')} · "
-                f"{entry.get('total_score', '—')}/100 · reviewed by {entry.get('qa_reviewer', '—')}"
-                if entry
-                else "The audit this was submitted about could not be found."
-            )
-            if entry.get("ticket_link"):
-                st.markdown(f"[Open ticket]({entry['ticket_link']})")
-            st.write(d.get("message", ""))
-            if d.get("categories"):
-                st.caption("Categories: " + ", ".join(d["categories"]))
-            if d.get("supporting_evidence"):
-                st.markdown(f"**Supporting evidence:** {d['supporting_evidence']}")
-
-            if entry.get("ticket_id") and d.get("request_type") == "dispute":
-                if st.button("Open this audit to edit the score", key=f"dispute_edit_{d['id']}"):
-                    ss["log_open_ticket_id"] = entry["ticket_id"]
-                    ss["log_open_audit_key"] = None
-                    ss[f"qa_editing_{entry['ticket_id']}"] = True
-                    st.switch_page("pages/2_QA_Log.py")
-                st.caption('Choose "Dispute" as the edit reason there to log it on the audit itself.')
-
-            if resolved:
-                st.success(f"Resolved by {d.get('resolved_by') or '—'} on {(d.get('resolved_at') or '')[:10]}")
-                st.write(d.get("reviewer_response") or "")
-                if st.button("Reopen", key=f"dispute_reopen_{d['id']}"):
-                    err = db.reopen_dispute(d["id"])
-                    if err:
-                        st.error(err)
-                    else:
-                        st.rerun()
-            else:
-                response = st.text_area("Response to agent", key=f"dispute_response_{d['id']}")
-                if st.button("Mark resolved", key=f"dispute_resolve_{d['id']}"):
-                    if not response.strip():
-                        st.error("Write a response before marking this resolved — the agent will see it.")
-                    else:
-                        err = db.resolve_dispute(d["id"], response.strip(), auth.current_reviewer())
-                        if err:
-                            st.error(err)
-                        else:
-                            st.success("Marked resolved.")
-                            st.rerun()
+    for week_start, week_disputes in _group_by_week(filtered):
+        label = "Date unknown" if week_start is None else f"Week of {week_start.strftime('%b %-d, %Y')}"
+        st.markdown(f"**{label}**")
+        for d in week_disputes:
+            _render_dispute_row(d, entries_by_id, ss)
+        st.write("")
