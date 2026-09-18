@@ -7,7 +7,11 @@ store). Tables mirror the original collections 1:1 — see sql/schema.sql:
   weekly_picks             -- Weekly QA batch state (id = "<agent_id>__<week_start>")
   qa_entries               -- one row per scored QA audit (id = Intercom conversation id)
   historical_qa_entries    -- one-time read-only import from the retired QA Tracker sheet
+  disputes                 -- agent-submitted questions/disputes from My Dashboard (id = uuid4)
 """
+
+import uuid
+from datetime import datetime, timezone
 
 import streamlit as st
 from supabase import create_client, Client
@@ -258,8 +262,99 @@ def list_historical_entries() -> list[dict]:
         return []
 
 
+# ---------- disputes ----------
+# Agent-submitted questions/disputes from My Dashboard's inline "Question or
+# dispute about this audit?" form (lib/disputes.py) — always tied to one
+# qa_entries row via entry_id, so the agent never re-types who they are,
+# which ticket it was, or what the score was.
+
+def create_dispute(
+    entry_id: str,
+    agent_id: str,
+    agent_name: str,
+    request_type: str,  # "question" | "dispute"
+    message: str,
+    categories: list[str] | None = None,
+    supporting_evidence: str = "",
+) -> str | None:
+    """Returns None on success, or an error message on failure."""
+    db = get_client()
+    if not db:
+        return "Database is not connected — check the Supabase URL/key in Secrets."
+    try:
+        db.table("disputes").insert(
+            {
+                "id": str(uuid.uuid4()),
+                "entry_id": str(entry_id),
+                "agent_id": str(agent_id) if agent_id else None,
+                "agent_name": agent_name,
+                "request_type": request_type,
+                "categories": categories or [],
+                "message": message,
+                "supporting_evidence": supporting_evidence or "",
+                "status": "open",
+            }
+        ).execute()
+        list_disputes.clear()
+        return None
+    except Exception as e:
+        return str(e)
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def list_disputes() -> list[dict]:
+    db = get_client()
+    if not db:
+        return []
+    try:
+        res = db.table("disputes").select("*").order("created_at", desc=True).limit(1000).execute()
+        return res.data or []
+    except Exception:
+        return []
+
+
+def resolve_dispute(dispute_id: str, reviewer_response: str, resolved_by: str) -> str | None:
+    """Marks a question/dispute resolved with the reviewer's written response,
+    which the agent then sees on My Dashboard. Returns None on success, or an
+    error message."""
+    db = get_client()
+    if not db:
+        return "Database is not connected — check the Supabase URL/key in Secrets."
+    try:
+        db.table("disputes").update(
+            {
+                "status": "resolved",
+                "reviewer_response": reviewer_response,
+                "resolved_by": resolved_by,
+                "resolved_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ).eq("id", str(dispute_id)).execute()
+        list_disputes.clear()
+        return None
+    except Exception as e:
+        return str(e)
+
+
+def reopen_dispute(dispute_id: str) -> str | None:
+    """Reverts a resolved question/dispute back to open, e.g. if the agent
+    isn't satisfied with the response. Returns None on success, or an error
+    message."""
+    db = get_client()
+    if not db:
+        return "Database is not connected — check the Supabase URL/key in Secrets."
+    try:
+        db.table("disputes").update(
+            {"status": "open", "reviewer_response": None, "resolved_by": None, "resolved_at": None}
+        ).eq("id", str(dispute_id)).execute()
+        list_disputes.clear()
+        return None
+    except Exception as e:
+        return str(e)
+
+
 def clear_cache() -> None:
     """Call after any write so the next read reflects it immediately."""
     list_agents.clear()
     list_reviewed.clear()
     list_qa_entries.clear()
+    list_disputes.clear()

@@ -12,7 +12,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from lib import agent_auth, db, ui
+from lib import agent_auth, db, disputes, ui
 from lib.constants import CRITICAL_ERRORS, RUBRIC
 from lib.intercom_client import conversation_url
 from lib.ui import result_badge_md
@@ -234,6 +234,10 @@ for e in sorted_entries:
 
         if e.get("is_escalated"):
             st.caption("🚩 Escalated")
+
+        if not e.get("is_test"):
+            st.divider()
+            disputes.render_agent_form(e, agent)
 
 st.divider()
 agent_auth.render_change_password()

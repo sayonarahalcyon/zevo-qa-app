@@ -94,7 +94,11 @@ CRITICAL_ERRORS = [
     },
 ]
 
-DISPUTE_FORM_URL = "https://forms.gle/zWbCg2ZRAcpmK6zb7"
+# Categories offered on the "Question or dispute about this audit?" form on
+# My Dashboard (lib/disputes.py) when the agent picks "Dispute the score" —
+# mirrors the rubric categories plus "Critical Error", matching the old
+# external QA Audit Question & Dispute Form's category checkboxes.
+DISPUTE_CATEGORIES = [r["name"] for r in RUBRIC] + ["Critical Error"]
 
 RESULT_PASS = "PASS"
 RESULT_COACHING = "COACHING"

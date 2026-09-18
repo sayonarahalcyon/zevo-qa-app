@@ -5,8 +5,8 @@ from datetime import date, timedelta
 import pandas as pd
 import streamlit as st
 
-from lib import agent_auth, auth, db, sheets_backup, ui
-from lib.constants import CRITICAL_ERRORS, DISPUTE_FORM_URL, RUBRIC, RUBRIC_GUIDE, is_excluded_agent_name
+from lib import agent_auth, auth, db, disputes, sheets_backup, ui
+from lib.constants import CRITICAL_ERRORS, RUBRIC, RUBRIC_GUIDE, is_excluded_agent_name
 from lib.intercom_client import IntercomError, conversation_url, get_conversation, list_admins
 from lib.ticket_view import render_ticket
 from lib.ui import result_badge_md
@@ -175,6 +175,15 @@ if ss.get("log_open_audit_key"):
 
 st.title("QA Log")
 st.caption(f"Reviewing as **{auth.current_reviewer()}**")
+
+# ---------- questions & disputes ----------
+# Agent-submitted via My Dashboard's inline "Question or dispute about this
+# audit?" form (lib/disputes.py) — visible to any signed-in reviewer, not
+# just Weng, since responding to these is routine reviewer work.
+st.subheader("Questions & disputes")
+disputes.render_reviewer_panel()
+
+st.divider()
 
 # ---------- manage agents ----------
 # Visible only to Weng — the roster shouldn't be editable by every reviewer,
@@ -540,4 +549,7 @@ with st.expander("Result thresholds"):
     )
 
 with st.expander("Dispute a score"):
-    st.markdown(f"Agents can dispute a QA score using the [QA Audit Dispute Form]({DISPUTE_FORM_URL}).")
+    st.markdown(
+        "Agents submit questions and disputes directly from **My Dashboard**, on the audit "
+        "itself — no separate form. They show up above in **Questions & disputes**."
+    )

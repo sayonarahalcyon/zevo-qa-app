@@ -84,11 +84,36 @@ create table if not exists historical_qa_entries (
     imported_at            timestamptz not null default now()
 );
 
+-- Agent-submitted questions/disputes from My Dashboard's inline "Question or
+-- dispute about this audit?" form — replaces the old external QA Audit
+-- Question & Dispute Form (Google Form). Always tied to one qa_entries row
+-- via entry_id, since the app already knows who the agent is and which
+-- audit they're looking at.
+create table if not exists disputes (
+    id                   text primary key,
+    entry_id             text not null references qa_entries(id) on delete cascade,
+    agent_id             text,
+    agent_name           text not null,
+    request_type         text not null check (request_type in ('question', 'dispute')),
+    categories           jsonb not null default '[]'::jsonb,
+    message              text not null,
+    supporting_evidence  text,
+    status               text not null default 'open' check (status in ('open', 'resolved')),
+    reviewer_response    text,
+    resolved_by          text,
+    resolved_at          timestamptz,
+    created_at           timestamptz not null default now(),
+    updated_at           timestamptz not null default now()
+);
+
 create index if not exists idx_qa_entries_agent on qa_entries (agent_name);
 create index if not exists idx_qa_entries_qa_date on qa_entries (qa_date);
 create index if not exists idx_weekly_picks_agent on weekly_picks (agent_id);
 create index if not exists idx_historical_qa_entries_agent on historical_qa_entries (agent_name);
 create index if not exists idx_historical_qa_entries_date on historical_qa_entries (qa_date);
+create index if not exists idx_disputes_entry on disputes (entry_id);
+create index if not exists idx_disputes_agent on disputes (agent_id);
+create index if not exists idx_disputes_status on disputes (status);
 
 -- Row Level Security: the app connects with the Supabase anon/service key
 -- set in Streamlit secrets, and enforces who can *write* itself (the
