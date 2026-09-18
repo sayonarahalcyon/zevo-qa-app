@@ -78,11 +78,12 @@ with st.container(border=True):
         st.caption("Open to everyone to browse. Sign in above to pull and score a ticket.")
 
     st.write("")
-    l1, l2, l3, l4 = st.columns(4)
+    l1, l2, l3, l4, l5 = st.columns(5)
     l1.page_link("pages/1_Weekly_QA_Batch.py", label="📅 Weekly QA Batch", use_container_width=True)
     l2.page_link("pages/2_QA_Log.py", label="📋 QA Log", use_container_width=True)
-    l3.page_link("pages/3_Historical_Log.py", label="🗄️ Historical Log", use_container_width=True)
-    l4.page_link("pages/4_My_Dashboard.py", label="🙋 My Dashboard", use_container_width=True)
+    l3.page_link("pages/5_Questions_Disputes.py", label="❓ Questions & Disputes", use_container_width=True)
+    l4.page_link("pages/3_Historical_Log.py", label="🗄️ Historical Log", use_container_width=True)
+    l5.page_link("pages/4_My_Dashboard.py", label="🙋 My Dashboard", use_container_width=True)
 
 st.write("")
 st.caption("Agent? View your own scores, trend, and reviewer feedback on My Dashboard — no reviewer sign-in needed.")

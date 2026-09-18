@@ -137,7 +137,7 @@ def render_reviewer_panel() -> None:
                     ss["log_open_ticket_id"] = entry["ticket_id"]
                     ss["log_open_audit_key"] = None
                     ss[f"qa_editing_{entry['ticket_id']}"] = True
-                    st.rerun()
+                    st.switch_page("pages/2_QA_Log.py")
                 st.caption('Choose "Dispute" as the edit reason there to log it on the audit itself.')
 
             if resolved:

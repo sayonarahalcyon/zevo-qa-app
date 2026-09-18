@@ -5,7 +5,7 @@ from datetime import date, timedelta
 import pandas as pd
 import streamlit as st
 
-from lib import agent_auth, auth, db, disputes, sheets_backup, ui
+from lib import agent_auth, auth, db, sheets_backup, ui
 from lib.constants import CRITICAL_ERRORS, RUBRIC, RUBRIC_GUIDE, is_excluded_agent_name
 from lib.intercom_client import IntercomError, conversation_url, get_conversation, list_admins
 from lib.ticket_view import render_ticket
@@ -176,12 +176,14 @@ if ss.get("log_open_audit_key"):
 st.title("QA Log")
 st.caption(f"Reviewing as **{auth.current_reviewer()}**")
 
-# ---------- questions & disputes ----------
-# Agent-submitted via My Dashboard's inline "Question or dispute about this
-# audit?" form (lib/disputes.py) — visible to any signed-in reviewer, not
-# just Weng, since responding to these is routine reviewer work.
-st.subheader("Questions & disputes")
-disputes.render_reviewer_panel()
+# ---------- questions & disputes pointer ----------
+# The actual inbox lives on its own page (pages/5_Questions_Disputes.py) —
+# just a link + open count here so it doesn't compete for space with the
+# rest of QA Log, but a reviewer still sees at a glance whether anything's
+# waiting on them.
+_open_dispute_count = sum(1 for d in db.list_disputes() if d.get("status") != "resolved")
+_qd_label = "❓ Questions & Disputes" + (f" — {_open_dispute_count} open" if _open_dispute_count else " — nothing open")
+st.page_link("pages/5_Questions_Disputes.py", label=_qd_label)
 
 st.divider()
 
