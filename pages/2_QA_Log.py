@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from lib import agent_auth, auth, db, sheets_backup, team_lead_auth, ui
-from lib.constants import CRITICAL_ERRORS, RUBRIC, RUBRIC_GUIDE, is_excluded_agent_name
+from lib.constants import CHANNEL_OPTIONS, CRITICAL_ERRORS, RUBRIC, RUBRIC_GUIDE, is_excluded_agent_name
 from lib.intercom_client import IntercomError, conversation_url, get_conversation, list_admins
 from lib.ticket_view import render_ticket
 from lib.ui import result_badge_md
@@ -588,17 +588,20 @@ st.divider()
 
 # ---------- filterable audit log ----------
 st.subheader("Audit log")
-f1, f2, f3, f4 = st.columns([1, 1, 1.3, 1.6])
+f1, f2, f3, f4, f5 = st.columns([1, 1, 0.8, 1.2, 1.5])
 agent_filter = f1.selectbox("Agent", ["All agents"] + sorted(agents_by_id.values()))
 result_filter = f2.selectbox("Result", ["All results", "PASS", "COACHING", "FAIL", "AUTO FAIL"])
-q_filter = f3.text_input("Search concern / comments…")
-date_range = f4.date_input("Date range", value=(), format="YYYY-MM-DD")
+channel_filter = f3.selectbox("Channel", ["All channels"] + CHANNEL_OPTIONS)
+q_filter = f4.text_input("Search concern / comments…")
+date_range = f5.date_input("Date range", value=(), format="YYYY-MM-DD")
 
 filtered = []
 for e in entries:
     if agent_filter != "All agents" and e.get("agent_name") != agent_filter:
         continue
     if result_filter != "All results" and e.get("result") != result_filter:
+        continue
+    if channel_filter != "All channels" and (e.get("channel") or "Chat") != channel_filter:
         continue
     if q_filter:
         hay = f"{e.get('agent_name','')} {' '.join(e.get('concern_types') or [])} {e.get('overall_comments','')}".lower()
@@ -619,11 +622,11 @@ if filtered:
     # in the leftmost column is clicked, not when clicking the row's text —
     # confusing since nothing here looks like a checkbox column. A plain
     # button per row is unambiguous and always clickable.
-    row_widths = [1, 1.6, 1.3, 1.4, 0.6, 1, 1.1, 0.5, 0.6, 0.7, 0.8]
-    h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11 = st.columns(row_widths)
+    row_widths = [1, 1.6, 1.3, 1.3, 0.7, 0.6, 1, 1.1, 0.5, 0.6, 0.7, 0.8]
+    h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12 = st.columns(row_widths)
     for h, label in zip(
-        (h1, h2, h3, h4, h5, h6, h7, h8, h9, h10),
-        ("Date", "Agent", "Ticket", "Concern", "Total", "Result", "Reviewer", "Test", "Escalated", "Disputed"),
+        (h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11),
+        ("Date", "Agent", "Ticket", "Concern", "Channel", "Total", "Result", "Reviewer", "Test", "Escalated", "Disputed"),
     ):
         h.markdown(f"**{label}**")
 
@@ -631,18 +634,19 @@ if filtered:
     for e in shown:
         ticket_id = e.get("ticket_id") or ""
         ticket_url = e.get("ticket_link") or (conversation_url(ticket_id) if ticket_id else "")
-        c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11 = st.columns(row_widths)
+        c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12 = st.columns(row_widths)
         c1.write(e.get("qa_date", "") or "—")
         c2.write(e.get("agent_name", "") or "—")
         c3.markdown(f"[{ticket_id}]({ticket_url})" if ticket_url else (ticket_id or "—"))
         c4.write(", ".join(e.get("concern_types") or []) or "—")
-        c5.write(e.get("total_score") if e.get("total_score") is not None else "—")
-        c6.markdown(result_badge_md(e.get("result", "")), unsafe_allow_html=True)
-        c7.write(e.get("qa_reviewer", "") or "—")
-        c8.write("🧪" if e.get("is_test") else "")
-        c9.write("🚩" if e.get("is_escalated") else "")
-        c10.write("⚖️" if any((h.get("reason") or "") == "Dispute" for h in (e.get("edit_log") or [])) else "")
-        if c11.button("View", key=f"view_audit_{_entry_key(e)}", use_container_width=True):
+        c5.write("📞 Phone" if (e.get("channel") or "Chat") == "Phone" else "")
+        c6.write(e.get("total_score") if e.get("total_score") is not None else "—")
+        c7.markdown(result_badge_md(e.get("result", "")), unsafe_allow_html=True)
+        c8.write(e.get("qa_reviewer", "") or "—")
+        c9.write("🧪" if e.get("is_test") else "")
+        c10.write("🚩" if e.get("is_escalated") else "")
+        c11.write("⚖️" if any((h.get("reason") or "") == "Dispute" for h in (e.get("edit_log") or [])) else "")
+        if c12.button("View", key=f"view_audit_{_entry_key(e)}", use_container_width=True):
             ss["log_open_audit_key"] = _entry_key(e)
             st.rerun()
 

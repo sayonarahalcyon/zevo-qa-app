@@ -96,11 +96,44 @@ team_pass_rate = (
     else None
 )
 
+team_counts = {"PASS": 0, "COACHING": 0, "FAIL": 0, "AUTO FAIL": 0}
+for e in team_entries:
+    if e.get("result") in team_counts:
+        team_counts[e["result"]] += 1
+
+# Company-wide figures, for the "vs. company" deltas below — same
+# metric_entries (all non-test audits, every agent) and the same
+# avg-score/pass-rate math QA Log's own dashboard uses, so the comparison
+# is apples-to-apples with what a reviewer sees there.
+company_avg = round(sum(e.get("total_score") or 0 for e in metric_entries) / len(metric_entries), 1) if metric_entries else None
+company_pass_rate = (
+    round(sum(1 for e in metric_entries if e.get("result") == "PASS") / len(metric_entries) * 100, 1)
+    if metric_entries
+    else None
+)
+avg_delta = round(team_avg - company_avg, 1) if (team_avg is not None and company_avg is not None) else None
+pass_rate_delta = (
+    round(team_pass_rate - company_pass_rate, 1) if (team_pass_rate is not None and company_pass_rate is not None) else None
+)
+
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Agents on your team", len(my_agents))
 c2.metric("Total Evaluations", len(team_entries))
-c3.metric("Team Avg Score", team_avg if team_avg is not None else "—")
-c4.metric("Team Pass Rate", f"{team_pass_rate}%" if team_pass_rate is not None else "—")
+c3.metric(
+    "Team Avg Score",
+    team_avg if team_avg is not None else "—",
+    delta=f"{avg_delta:+.1f} vs. company" if avg_delta is not None else None,
+)
+c4.metric(
+    "Team Pass Rate",
+    f"{team_pass_rate}%" if team_pass_rate is not None else "—",
+    delta=f"{pass_rate_delta:+.1f}% vs. company" if pass_rate_delta is not None else None,
+)
+
+b1, b2, b3 = st.columns(3)
+b1.metric("Pass", team_counts["PASS"])
+b2.metric("Coaching", team_counts["COACHING"])
+b3.metric("Fail", team_counts["FAIL"] + team_counts["AUTO FAIL"])
 
 st.divider()
 
@@ -123,7 +156,7 @@ for a in my_agents:
     week_count = sum(
         1 for e in mine if e.get("qa_date") and week_monday.isoformat() <= e["qa_date"] <= week_sunday.isoformat()
     )
-    status = ("Pass" if (avg or 0) >= 85 else "Fail") if avg is not None else "—"
+    status = ("🟢 Pass" if (avg or 0) >= 85 else "🔴 Fail") if avg is not None else "—"
 
     r1, r2, r3, r4, r5, r6 = st.columns(row_widths)
     r1.write(a["name"])
