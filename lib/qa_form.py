@@ -19,6 +19,7 @@ import streamlit as st
 
 from lib import auth, db, sheets_backup
 from lib.constants import (
+    CHANNEL_OPTIONS,
     CONCERN_TYPES,
     CRITICAL_ERRORS,
     RENTER_HOST_OPTIONS,
@@ -61,6 +62,7 @@ def _render_summary(ticket_id: str, qa: dict, editing_key: str) -> None:
         f"{qa.get('agent_name', '')} · reviewed by {qa.get('qa_reviewer', '—')} · {qa.get('qa_date', '')}"
         + (" · 🧪 TEST" if qa.get("is_test") else "")
         + (" · 🚩 ESCALATED" if qa.get("is_escalated") else "")
+        + (" · 📞 PHONE" if (qa.get("channel") or "Chat") == "Phone" else "")
     )
     edit_log = qa.get("edit_log") or []
     if edit_log:
@@ -201,7 +203,7 @@ def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, edi
         st.caption("Only Erwin, Weng, and Kristine can save changes here — everyone else can view read-only.")
         return
 
-    tc1, tc2 = st.columns(2)
+    tc1, tc2, tc3 = st.columns(3)
     is_test = tc1.checkbox(
         "🧪 Mark as a test audit",
         value=bool((existing or {}).get("is_test", False)),
@@ -213,6 +215,13 @@ def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, edi
         value=bool((existing or {}).get("is_escalated", default_escalated)),
         key=f"is_escalated_{ticket_id}",
         help="Auto-checked when this ticket came from 'Manually log a ticket' on Weekly QA Batch — toggle any time. Shows as a tag in the QA Log so it's easy to tell apart from the random pull.",
+    )
+    channel = tc3.selectbox(
+        "Channel",
+        CHANNEL_OPTIONS,
+        index=_safe_index(CHANNEL_OPTIONS, (existing or {}).get("channel") or "Chat"),
+        key=f"channel_{ticket_id}",
+        help="Which support channel this audit came from. Shows as a tag and is filterable in the Audit log.",
     )
 
     # A score only gets reopened after being saved for one of two reasons in
@@ -290,6 +299,7 @@ def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, edi
             "qa_date": qa_date.isoformat(),
             "is_test": is_test,
             "is_escalated": is_escalated,
+            "channel": channel,
             "edit_log": edit_log,
             "updated_at": now,
             "created_at": (existing or {}).get("created_at") or now,

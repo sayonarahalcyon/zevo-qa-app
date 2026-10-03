@@ -53,6 +53,7 @@ HEADER = [
     "ZOMP Link",
     "Test",
     "Escalated",
+    "Channel",
 ]
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -122,6 +123,7 @@ def _entry_to_row(ticket_id: str, entry: dict) -> list:
         entry.get("zomp_link", ""),
         "TEST" if entry.get("is_test") else "",
         "ESCALATED" if entry.get("is_escalated") else "",
+        entry.get("channel") or "Chat",
     ]
 
 
