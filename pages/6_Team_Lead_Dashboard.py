@@ -102,17 +102,24 @@ for e in team_entries:
         team_counts[e["result"]] += 1
 
 
-def _breakdown_help(bucket_entries: list[dict]) -> str | None:
-    """Tooltip text for a Pass/Coaching/Fail metric: who/when/which ticket,
-    newest first, capped at 10 so the tooltip doesn't get unreadably long."""
+def _breakdown_help(bucket_entries: list[dict], *, show_score: bool = False, show_result: bool = False) -> str | None:
+    """Tooltip text for a team-wide metric: who/when/which ticket (and,
+    optionally, the score or result) made up the number, newest first,
+    capped at 10 so the tooltip doesn't get unreadably long."""
     if not bucket_entries:
         return None
     ordered = sorted(bucket_entries, key=lambda e: e.get("qa_date") or "", reverse=True)
-    lines = [
-        f"- {e.get('agent_name') or 'Unknown agent'} — {e.get('qa_date') or '—'} "
-        f"(Ticket {e.get('ticket_id') or e.get('id') or '—'})"
-        for e in ordered[:10]
-    ]
+    lines = []
+    for e in ordered[:10]:
+        line = (
+            f"- {e.get('agent_name') or 'Unknown agent'} — {e.get('qa_date') or '—'} "
+            f"(Ticket {e.get('ticket_id') or e.get('id') or '—'})"
+        )
+        if show_score:
+            line += f", {e.get('total_score', '—')}/100"
+        if show_result:
+            line += f" — {e.get('result') or '—'}"
+        lines.append(line)
     if len(ordered) > 10:
         lines.append(f"...and {len(ordered) - 10} more — see the Audit log on QA Log for the full list.")
     return "\n".join(lines)
@@ -144,11 +151,13 @@ c3.metric(
     "Team Avg Score",
     team_avg if team_avg is not None else "—",
     delta=f"{avg_delta:+.1f} vs. company" if avg_delta is not None else None,
+    help=_breakdown_help(team_entries, show_score=True),
 )
 c4.metric(
     "Team Pass Rate",
     f"{team_pass_rate}%" if team_pass_rate is not None else "—",
     delta=f"{pass_rate_delta:+.1f}% vs. company" if pass_rate_delta is not None else None,
+    help=_breakdown_help(team_entries, show_result=True),
 )
 
 b1, b2, b3 = st.columns(3)
