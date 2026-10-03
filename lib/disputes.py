@@ -23,19 +23,28 @@ from lib import auth, db
 from lib.constants import DISPUTE_CATEGORIES
 
 
-def render_agent_form(entry: dict, agent: dict) -> None:
-    """Mounted inside one audit's expander on My Dashboard. `entry` is the
-    qa_entries row being viewed; `agent` is agent_auth.current_agent()."""
+def render_agent_form(entry: dict, agent: dict, *, submitted_by: str | None = None) -> None:
+    """Mounted inside one audit's expander on My Dashboard, and (as of
+    2026-10-03) on the Team Lead Dashboard's drill-down. `entry` is the
+    qa_entries row being viewed; `agent` is whose audit this is
+    (agent_auth.current_agent() on My Dashboard, or the agent being viewed
+    on the Team Lead Dashboard). `submitted_by` is who's actually filling
+    the form in, when that's not the agent themselves — the signed-in team
+    lead's name, from the Team Lead Dashboard. The submission is still
+    recorded against the agent either way; submitted_by just notes who
+    filed it, shown to both the agent and the reviewer."""
     entry_id = entry["id"]
 
     existing = [d for d in db.list_disputes() if d.get("entry_id") == entry_id]
     if existing:
-        st.markdown("**Your questions/disputes on this audit**")
+        st.markdown("**Your questions/disputes on this audit**" if not submitted_by else "**Questions/disputes on this audit**")
         for d in sorted(existing, key=lambda r: r.get("created_at") or "", reverse=True):
             _render_existing(d)
         st.write("")
 
     with st.expander("❓ Question or dispute about this audit?"):
+        if submitted_by:
+            st.caption(f"Submitting as **{submitted_by}**, on behalf of **{agent.get('name', 'this agent')}**.")
         kind = st.radio(
             "What's this about?",
             ["Ask a question", "Dispute the score"],
@@ -78,9 +87,13 @@ def render_agent_form(entry: dict, agent: dict) -> None:
                     message=message.strip(),
                     categories=categories,
                     supporting_evidence=evidence.strip(),
+                    submitted_by=submitted_by,
                 )
                 if err:
                     st.error(f"Couldn't submit: {err}")
+                elif submitted_by:
+                    st.success(f"Submitted on {agent.get('name', 'the agent')}'s behalf — a reviewer will follow up here.")
+                    st.rerun()
                 else:
                     st.success("Submitted — a reviewer will follow up here.")
                     st.rerun()
@@ -90,7 +103,8 @@ def _render_existing(d: dict) -> None:
     kind_label = "Question" if d.get("request_type") == "question" else "Dispute"
     resolved = d.get("status") == "resolved"
     badge = "🟢 Resolved" if resolved else "🟡 Open — awaiting reviewer"
-    st.caption(f"**{kind_label}** · {badge} · submitted {(d.get('created_at') or '')[:10]}")
+    filed_note = f" · filed by {d['submitted_by']} on your behalf" if d.get("submitted_by") else ""
+    st.caption(f"**{kind_label}** · {badge} · submitted {(d.get('created_at') or '')[:10]}{filed_note}")
     st.write(d.get("message", ""))
     if d.get("categories"):
         st.caption("Categories: " + ", ".join(d["categories"]))
@@ -126,6 +140,8 @@ def _render_dispute_row(d: dict, entries_by_id: dict, ss) -> None:
     badge = "🟢 Resolved" if resolved else "🟡 Open"
     ticket_id = entry.get("ticket_id") or "—"
     label = f"{kind_label} · {d.get('agent_name') or '—'} · Ticket {ticket_id} · {badge}"
+    if d.get("submitted_by"):
+        label += f" · filed by {d['submitted_by']}"
     if d.get("is_test"):
         label += " · 🧪 TEST"
 

@@ -11,10 +11,15 @@ your evaluations" caption; the Team Lead Dashboard shows a back button and
 the agent's name instead). It never writes to qa_entries.
 
 show_dispute_form controls the inline "Question or dispute about this
-audit?" form on each audit: My Dashboard passes the default (True), since
-submitting one is the signed-in agent's own action; the Team Lead Dashboard's
-drill-down passes False, since a team lead viewing an agent's dashboard
-isn't the agent submitting on their own behalf.
+audit?" form on each audit: both My Dashboard and the Team Lead Dashboard's
+drill-down leave it at the default (True). submitted_by distinguishes who's
+actually filling it in: My Dashboard leaves it unset, since the signed-in
+agent is submitting on their own behalf; the Team Lead Dashboard's
+drill-down passes the signed-in team lead's name, since they're submitting
+on the agent's behalf (2026-10-03) — the submission is still recorded
+against the agent (same agent_id/agent_name as always), with submitted_by
+noting who actually filed it, visible to both the agent on My Dashboard and
+the reviewer in the Questions & Disputes inbox.
 """
 
 from datetime import date, timedelta
@@ -37,7 +42,7 @@ _FAIL = "#cf4a5c"
 _MUTED = "#5c6f66"
 
 
-def render(agent: dict, *, show_dispute_form: bool = True) -> None:
+def render(agent: dict, *, show_dispute_form: bool = True, submitted_by: str | None = None) -> None:
     entries = [
         e
         for e in db.list_qa_entries()
@@ -237,4 +242,4 @@ def render(agent: dict, *, show_dispute_form: bool = True) -> None:
 
             if not e.get("is_test") and show_dispute_form:
                 st.divider()
-                disputes.render_agent_form(e, agent)
+                disputes.render_agent_form(e, agent, submitted_by=submitted_by)

@@ -381,13 +381,18 @@ def create_dispute(
     categories: list[str] | None = None,
     supporting_evidence: str = "",
     is_test: bool = False,
+    submitted_by: str | None = None,
 ) -> str | None:
     """Returns None on success, or an error message on failure. `is_test`
     mirrors qa_entries.is_test — it isn't exposed as a checkbox on the agent
     form (agents never intentionally submit a test dispute), but lets test
     rows created directly (e.g. for demoing the feature) be excluded from
     the Questions & Disputes open/resolved counts, same as test audits are
-    excluded from the QA Log's dashboard totals."""
+    excluded from the QA Log's dashboard totals. `submitted_by` (added
+    2026-10-03) names whoever actually filed this, when that isn't the
+    agent themselves — e.g. a team lead submitting from the Team Lead
+    Dashboard's drill-down on the agent's behalf. NULL means the agent
+    submitted it themselves, same as before this field existed."""
     db = get_client()
     if not db:
         return "Database is not connected — check the Supabase URL/key in Secrets."
@@ -404,6 +409,7 @@ def create_dispute(
                 "supporting_evidence": supporting_evidence or "",
                 "status": "open",
                 "is_test": is_test,
+                "submitted_by": submitted_by,
             }
         ).execute()
         list_disputes.clear()
