@@ -101,6 +101,27 @@ for e in team_entries:
     if e.get("result") in team_counts:
         team_counts[e["result"]] += 1
 
+
+def _breakdown_help(bucket_entries: list[dict]) -> str | None:
+    """Tooltip text for a Pass/Coaching/Fail metric: who/when/which ticket,
+    newest first, capped at 10 so the tooltip doesn't get unreadably long."""
+    if not bucket_entries:
+        return None
+    ordered = sorted(bucket_entries, key=lambda e: e.get("qa_date") or "", reverse=True)
+    lines = [
+        f"- {e.get('agent_name') or 'Unknown agent'} — {e.get('qa_date') or '—'} "
+        f"(Ticket {e.get('ticket_id') or e.get('id') or '—'})"
+        for e in ordered[:10]
+    ]
+    if len(ordered) > 10:
+        lines.append(f"...and {len(ordered) - 10} more — see the Audit log on QA Log for the full list.")
+    return "\n".join(lines)
+
+
+pass_entries = [e for e in team_entries if e.get("result") == "PASS"]
+coaching_entries = [e for e in team_entries if e.get("result") == "COACHING"]
+fail_entries = [e for e in team_entries if e.get("result") in ("FAIL", "AUTO FAIL")]
+
 # Company-wide figures, for the "vs. company" deltas below — same
 # metric_entries (all non-test audits, every agent) and the same
 # avg-score/pass-rate math QA Log's own dashboard uses, so the comparison
@@ -131,9 +152,9 @@ c4.metric(
 )
 
 b1, b2, b3 = st.columns(3)
-b1.metric("Pass", team_counts["PASS"])
-b2.metric("Coaching", team_counts["COACHING"])
-b3.metric("Fail", team_counts["FAIL"] + team_counts["AUTO FAIL"])
+b1.metric("Pass", team_counts["PASS"], help=_breakdown_help(pass_entries))
+b2.metric("Coaching", team_counts["COACHING"], help=_breakdown_help(coaching_entries))
+b3.metric("Fail", team_counts["FAIL"] + team_counts["AUTO FAIL"], help=_breakdown_help(fail_entries))
 
 st.divider()
 
