@@ -85,6 +85,22 @@ def set_agent_password(agent_id: str, password_hash: str | None) -> str | None:
         return str(e)
 
 
+def set_agent_team_lead(agent_id: str, team_lead_id: str | None) -> str | None:
+    """Assigns (or, passing None, clears) one agent's team lead. Returns None
+    on success, or an error message. Called from the QA Log's "Manage
+    agents" panel — team_lead_id is the source of truth for which agents
+    show up on a given team lead's Team Lead Dashboard rollup."""
+    db = get_client()
+    if not db:
+        return "Database is not connected — check the Supabase URL/key in Secrets."
+    try:
+        db.table("agents").update({"team_lead_id": team_lead_id}).eq("id", str(agent_id)).execute()
+        list_agents.clear()
+        return None
+    except Exception as e:
+        return str(e)
+
+
 def delete_agent(agent_id: str) -> str | None:
     """Deletes one row from the agents directory. Returns None on success, or
     an error message. Used only by the QA Log's Weng-only "Manage agents"
@@ -96,6 +112,42 @@ def delete_agent(agent_id: str) -> str | None:
         return "Database is not connected — check the Supabase URL/key in Secrets."
     try:
         db.table("agents").delete().eq("id", str(agent_id)).execute()
+        return None
+    except Exception as e:
+        return str(e)
+
+
+# ---------- team_leads ----------
+# Three fixed team leads (seeded by sql/schema.sql / the 2026-10-03
+# migration), each with their own Team Lead Dashboard sign-in — same
+# resettable-bcrypt-password pattern as agents.password_hash, set via QA
+# Log → Manage team leads. Which agents a team lead sees is agents.team_lead_id
+# (see set_agent_team_lead above), not anything stored here.
+
+@st.cache_data(ttl=30, show_spinner=False)
+def list_team_leads() -> list[dict]:
+    db = get_client()
+    if not db:
+        return []
+    try:
+        res = db.table("team_leads").select("*").limit(50).execute()
+        return res.data or []
+    except Exception:
+        return []
+
+
+def set_team_lead_password(team_lead_id: str, password_hash: str | None) -> str | None:
+    """Sets (or, passing None, clears) one team lead's dashboard password
+    hash. Returns None on success, or an error message. Called from the QA
+    Log's "Manage team leads" panel (a reviewer setting/resetting it) and
+    from lib.team_lead_auth.render_change_password() (a team lead changing
+    their own)."""
+    db = get_client()
+    if not db:
+        return "Database is not connected — check the Supabase URL/key in Secrets."
+    try:
+        db.table("team_leads").update({"password_hash": password_hash}).eq("id", str(team_lead_id)).execute()
+        list_team_leads.clear()
         return None
     except Exception as e:
         return str(e)
@@ -362,6 +414,7 @@ def reopen_dispute(dispute_id: str) -> str | None:
 def clear_cache() -> None:
     """Call after any write so the next read reflects it immediately."""
     list_agents.clear()
+    list_team_leads.clear()
     list_reviewed.clear()
     list_qa_entries.clear()
     list_disputes.clear()
