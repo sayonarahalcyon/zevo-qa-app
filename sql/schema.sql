@@ -3,6 +3,25 @@
 -- Replaces the Claude artifact's `db` capability (a small document store);
 -- table names match the original collections 1:1.
 
+-- Three fixed team leads, each with their own Team Lead Dashboard (a rollup
+-- of, and drill-down into, the agents assigned to them). Seeded below so new
+-- installs have the three real team leads from day one; team_lead_id on
+-- agents (further down) is the actual agent→team-lead assignment.
+create table if not exists team_leads (
+    id             text primary key,          -- slug, e.g. "aga-luague"
+    name           text not null,
+    password_hash  text,                      -- bcrypt hash for Team Lead Dashboard sign-in;
+                                                -- NULL until a reviewer sets one (see
+                                                -- QA Log → Manage team leads)
+    updated_at     timestamptz not null default now()
+);
+
+insert into team_leads (id, name) values
+    ('aga-luague', 'Aga Luague'),
+    ('elizabeth-alerta', 'Elizabeth Alerta'),
+    ('stella-albacite', 'Stella Albacite')
+on conflict (id) do nothing;
+
 create table if not exists agents (
     id             text primary key,          -- Intercom admin id
     name           text not null,
@@ -10,6 +29,9 @@ create table if not exists agents (
     password_hash  text,                      -- bcrypt hash for My Dashboard sign-in;
                                                 -- NULL until a reviewer sets one (see
                                                 -- QA Log → Manage agents)
+    team_lead_id   text references team_leads(id),  -- which team lead this agent rolls
+                                                       -- up under, if any (see QA Log →
+                                                       -- Manage agents → Assign a team lead)
     updated_at     timestamptz not null default now()
 );
 
@@ -109,6 +131,7 @@ create table if not exists disputes (
     updated_at           timestamptz not null default now()
 );
 
+create index if not exists idx_agents_team_lead on agents (team_lead_id);
 create index if not exists idx_qa_entries_agent on qa_entries (agent_name);
 create index if not exists idx_qa_entries_qa_date on qa_entries (qa_date);
 create index if not exists idx_weekly_picks_agent on weekly_picks (agent_id);
