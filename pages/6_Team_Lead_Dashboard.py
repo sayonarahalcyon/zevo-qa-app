@@ -102,14 +102,22 @@ for e in team_entries:
         team_counts[e["result"]] += 1
 
 
-def _breakdown_help(bucket_entries: list[dict], *, show_score: bool = False, show_result: bool = False) -> str | None:
-    """Tooltip text for a team-wide metric: who/when/which ticket (and,
-    optionally, the score or result) made up the number, newest first,
-    capped at 10 so the tooltip doesn't get unreadably long."""
+def _breakdown_help(
+    bucket_entries: list[dict], explanation: str, *, show_score: bool = False, show_result: bool = False
+) -> str:
+    """Tooltip text for a team-wide metric: a plain-language explanation of
+    how the number is calculated, always shown, followed by who/when/which
+    ticket (and, optionally, the score or result) made up the number,
+    newest first, capped at 10 so the tooltip doesn't get unreadably long.
+    Always returns text (never None) so the "how is this calculated"
+    explanation still shows even when the bucket is empty, e.g. a team with
+    no Fail results yet."""
+    lines = [explanation]
     if not bucket_entries:
-        return None
+        lines.append("\nNo evaluations in this bucket yet.")
+        return "\n".join(lines)
     ordered = sorted(bucket_entries, key=lambda e: e.get("qa_date") or "", reverse=True)
-    lines = []
+    detail_lines = []
     for e in ordered[:10]:
         line = (
             f"- {e.get('agent_name') or 'Unknown agent'} — {e.get('qa_date') or '—'} "
@@ -119,9 +127,11 @@ def _breakdown_help(bucket_entries: list[dict], *, show_score: bool = False, sho
             line += f", {e.get('total_score', '—')}/100"
         if show_result:
             line += f" — {e.get('result') or '—'}"
-        lines.append(line)
+        detail_lines.append(line)
     if len(ordered) > 10:
-        lines.append(f"...and {len(ordered) - 10} more — see the Audit log on QA Log for the full list.")
+        detail_lines.append(f"...and {len(ordered) - 10} more — see the Audit log on QA Log for the full list.")
+    lines.append("")
+    lines.extend(detail_lines)
     return "\n".join(lines)
 
 
@@ -151,19 +161,45 @@ c3.metric(
     "Team Avg Score",
     team_avg if team_avg is not None else "—",
     delta=f"{avg_delta:+.1f} vs. company" if avg_delta is not None else None,
-    help=_breakdown_help(team_entries, show_score=True),
+    help=_breakdown_help(
+        team_entries,
+        f"The average total score (out of 100) across all {len(team_entries)} non-test evaluations "
+        "logged for your team, all-time — not scoped to a day, week, or month. The note underneath "
+        "compares this to the same average across every agent, every team, company-wide.",
+        show_score=True,
+    ),
 )
 c4.metric(
     "Team Pass Rate",
     f"{team_pass_rate}%" if team_pass_rate is not None else "—",
     delta=f"{pass_rate_delta:+.1f}% vs. company" if pass_rate_delta is not None else None,
-    help=_breakdown_help(team_entries, show_result=True),
+    help=_breakdown_help(
+        team_entries,
+        f"The share of your team's {len(team_entries)} non-test evaluations, all-time, that scored "
+        "PASS (85 or higher out of 100). The note underneath compares this to the same pass rate "
+        "across every agent, every team, company-wide.",
+        show_result=True,
+    ),
 )
 
 b1, b2, b3 = st.columns(3)
-b1.metric("Pass", team_counts["PASS"], help=_breakdown_help(pass_entries))
-b2.metric("Coaching", team_counts["COACHING"], help=_breakdown_help(coaching_entries))
-b3.metric("Fail", team_counts["FAIL"] + team_counts["AUTO FAIL"], help=_breakdown_help(fail_entries))
+b1.metric(
+    "Pass",
+    team_counts["PASS"],
+    help=_breakdown_help(pass_entries, "Evaluations that scored 85 or higher out of 100."),
+)
+b2.metric(
+    "Coaching",
+    team_counts["COACHING"],
+    help=_breakdown_help(coaching_entries, "Evaluations that scored 70-84 out of 100."),
+)
+b3.metric(
+    "Fail",
+    team_counts["FAIL"] + team_counts["AUTO FAIL"],
+    help=_breakdown_help(
+        fail_entries, "Evaluations that scored below 70 out of 100, or hit an AUTO FAIL (any critical error flagged)."
+    ),
+)
 
 st.divider()
 
