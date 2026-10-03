@@ -10,6 +10,7 @@ store). Tables mirror the original collections 1:1 — see sql/schema.sql:
   disputes                 -- agent-submitted questions/disputes from My Dashboard (id = uuid4)
 """
 
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -118,11 +119,12 @@ def delete_agent(agent_id: str) -> str | None:
 
 
 # ---------- team_leads ----------
-# Three fixed team leads (seeded by sql/schema.sql / the 2026-10-03
-# migration), each with their own Team Lead Dashboard sign-in — same
-# resettable-bcrypt-password pattern as agents.password_hash, set via QA
-# Log → Manage team leads. Which agents a team lead sees is agents.team_lead_id
-# (see set_agent_team_lead above), not anything stored here.
+# Seeded with 3 real team leads (sql/schema.sql / the 2026-10-03 migration),
+# but not fixed at 3 — a reviewer can add or remove one from QA Log →
+# Manage team leads. Each has their own Team Lead Dashboard sign-in, same
+# resettable-bcrypt-password pattern as agents.password_hash. Which agents a
+# team lead sees is agents.team_lead_id (see set_agent_team_lead above), not
+# anything stored here.
 
 @st.cache_data(ttl=30, show_spinner=False)
 def list_team_leads() -> list[dict]:
@@ -134,6 +136,56 @@ def list_team_leads() -> list[dict]:
         return res.data or []
     except Exception:
         return []
+
+
+def _slugify(name: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
+    return slug or "team-lead"
+
+
+def create_team_lead(name: str) -> tuple[str | None, str | None]:
+    """Creates a new team lead row, deriving its id from the name (slugified,
+    with a numeric suffix added if that slug is already taken). Returns
+    (new_id, None) on success, or (None, error_message) on failure. Called
+    from the QA Log's "Manage team leads" panel — a reviewer adding a 4th
+    (or more) team lead beyond the 3 seeded ones. No password is set here;
+    that's a separate step in the same panel, same as adding an agent."""
+    db = get_client()
+    if not db:
+        return None, "Database is not connected — check the Supabase URL/key in Secrets."
+    if not name.strip():
+        return None, "Name is required."
+    base_slug = _slugify(name)
+    existing_ids = {t["id"] for t in list_team_leads()}
+    slug = base_slug
+    n = 2
+    while slug in existing_ids:
+        slug = f"{base_slug}-{n}"
+        n += 1
+    try:
+        db.table("team_leads").insert({"id": slug, "name": name.strip()}).execute()
+        list_team_leads.clear()
+        return slug, None
+    except Exception as e:
+        return None, str(e)
+
+
+def delete_team_lead(team_lead_id: str) -> str | None:
+    """Deletes one team lead. Returns None on success, or an error message.
+    Any agent assigned to them is automatically unassigned rather than
+    blocking the delete — agents.team_lead_id's foreign key is ON DELETE SET
+    NULL (see sql/schema.sql / the 2026-10-03 migration) — so this also
+    clears list_agents' cache, not just list_team_leads'."""
+    db = get_client()
+    if not db:
+        return "Database is not connected — check the Supabase URL/key in Secrets."
+    try:
+        db.table("team_leads").delete().eq("id", str(team_lead_id)).execute()
+        list_team_leads.clear()
+        list_agents.clear()
+        return None
+    except Exception as e:
+        return str(e)
 
 
 def set_team_lead_password(team_lead_id: str, password_hash: str | None) -> str | None:
