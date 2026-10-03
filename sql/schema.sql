@@ -81,6 +81,10 @@ create table if not exists qa_entries (
     is_escalated           boolean not null default false,  -- flagged via "Mark as escalated" or auto-set when the
                                                               -- ticket came from "Manually log a ticket" (as opposed
                                                               -- to the random Weekly QA batch / Quick Sample pulls)
+    channel                text not null default 'Chat',     -- "Chat" (every audit so far, sourced from an
+                                                              -- Intercom conversation) or "Phone" (Phone Support
+                                                              -- Ticket evaluations, added later) — see QA Log's
+                                                              -- Audit log filter
     created_at             timestamptz not null default now(),
     updated_at             timestamptz not null default now()
 );
@@ -132,6 +136,12 @@ create table if not exists disputes (
     is_test              boolean not null default false,  -- test rows (created directly, not
                                                               -- via the agent form) excluded from
                                                               -- the Questions & Disputes open/resolved counts
+    submitted_by         text,                             -- who actually filed this, when it
+                                                              -- isn't the agent themselves (e.g. a
+                                                              -- team lead submitting on the agent's
+                                                              -- behalf from the Team Lead Dashboard's
+                                                              -- drill-down) -- NULL means the agent
+                                                              -- submitted it themselves
     created_at           timestamptz not null default now(),
     updated_at           timestamptz not null default now()
 );
