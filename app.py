@@ -14,6 +14,7 @@ qa_log = st.Page("pages/2_QA_Log.py", title="QA Log", icon="📋")
 historical = st.Page("pages/3_Historical_Log.py", title="Historical Log", icon="🗄️")
 my_dashboard = st.Page("pages/4_My_Dashboard.py", title="My Dashboard", icon="🙋")
 questions_disputes = st.Page("pages/5_Questions_Disputes.py", title="Questions & Disputes", icon="❓")
+team_lead_dashboard = st.Page("pages/6_Team_Lead_Dashboard.py", title="Team Lead Dashboard", icon="🧑‍💼")
 
-pg = st.navigation([home, weekly, qa_log, questions_disputes, historical, my_dashboard])
+pg = st.navigation([home, weekly, qa_log, questions_disputes, historical, my_dashboard, team_lead_dashboard])
 pg.run()
