@@ -5,7 +5,7 @@ from datetime import date, timedelta
 import pandas as pd
 import streamlit as st
 
-from lib import agent_auth, auth, db, sheets_backup, ui
+from lib import agent_auth, auth, db, sheets_backup, team_lead_auth, ui
 from lib.constants import CRITICAL_ERRORS, RUBRIC, RUBRIC_GUIDE, is_excluded_agent_name
 from lib.intercom_client import IntercomError, conversation_url, get_conversation, list_admins
 from lib.ticket_view import render_ticket
@@ -311,6 +311,86 @@ if auth.current_reviewer() == "Weng Yee":
                         ss["_agent_sync_msg"] = (
                             "ok",
                             f"Password set for {pw_agent['name']} — they can now sign in on My Dashboard.",
+                        )
+                    st.rerun()
+
+        st.markdown("**Assign a team lead**")
+        st.caption(
+            "Which team lead's Team Lead Dashboard this agent rolls up under and can be "
+            "drilled into from. An agent with no team lead assigned doesn't show up on anyone's "
+            "dashboard — it only changes what team leads can see, not how the agent is scored."
+        )
+        team_leads = sorted(db.list_team_leads(), key=lambda t: (t.get("name") or "").lower())
+        tl_options = ["Select an agent..."] + [f'{a["name"]} ({a["id"]})' for a in removable]
+        tl_agent_choice = st.selectbox("Agent", tl_options, key="assign_tl_agent_select")
+        if tl_agent_choice != "Select an agent...":
+            tl_agent = removable[tl_options.index(tl_agent_choice) - 1]
+            tl_by_id = {t["id"]: t["name"] for t in team_leads}
+            current_tl_id = tl_agent.get("team_lead_id")
+            lead_names = ["No team lead"] + [t["name"] for t in team_leads]
+            current_index = (
+                1 + [t["id"] for t in team_leads].index(current_tl_id)
+                if current_tl_id in tl_by_id
+                else 0
+            )
+            st.caption(
+                f"Currently assigned to **{tl_by_id.get(current_tl_id)}**."
+                if current_tl_id in tl_by_id
+                else "Not assigned to a team lead yet."
+            )
+            new_lead_name = st.selectbox(
+                "Team lead", lead_names, index=current_index, key="assign_tl_lead_select"
+            )
+            if st.button("Save team lead", key="assign_tl_save"):
+                new_lead_id = next((t["id"] for t in team_leads if t["name"] == new_lead_name), None)
+                err = db.set_agent_team_lead(tl_agent["id"], new_lead_id)
+                if err:
+                    ss["_agent_sync_msg"] = ("error", f"Could not update {tl_agent['name']}'s team lead: {err}")
+                elif new_lead_id:
+                    ss["_agent_sync_msg"] = ("ok", f"{tl_agent['name']} is now assigned to {new_lead_name}.")
+                else:
+                    ss["_agent_sync_msg"] = ("ok", f"{tl_agent['name']} is no longer assigned to a team lead.")
+                st.rerun()
+
+# ---------- manage team leads ----------
+# Visible only to Weng, same reasoning as Manage agents above. The 3 team
+# leads themselves are fixed (seeded by sql/schema.sql / the 2026-10-03
+# migration) — this panel only sets/resets their Team Lead Dashboard
+# password, same pattern as an agent's My Dashboard password.
+if auth.current_reviewer() == "Weng Yee":
+    tl_pw_msg = ss.pop("_tl_pw_msg", None)
+    if tl_pw_msg:
+        kind, text = tl_pw_msg
+        (st.success if kind == "ok" else st.error)(text)
+
+    with st.expander("Manage team leads"):
+        st.caption(
+            "Lets a team lead sign in on Team Lead Dashboard to see a rollup of, and drill "
+            "into, the agents assigned to them (QA Log → Manage agents → Assign a team lead) — "
+            "read-only, no edit access. They can change it themselves afterward."
+        )
+        team_leads = sorted(db.list_team_leads(), key=lambda t: (t.get("name") or "").lower())
+        tl_pw_options = ["Select a team lead..."] + [f'{t["name"]} ({t["id"]})' for t in team_leads]
+        tl_pw_choice = st.selectbox("Team lead", tl_pw_options, key="set_tl_pw_select")
+        if tl_pw_choice != "Select a team lead...":
+            tl_pw_lead = team_leads[tl_pw_options.index(tl_pw_choice) - 1]
+            has_tl_pw = bool(tl_pw_lead.get("password_hash"))
+            st.caption("Already has a password set — this replaces it." if has_tl_pw else "No password set yet.")
+            tl_new_pw1 = st.text_input("New password", type="password", key="set_tl_pw_new")
+            tl_new_pw2 = st.text_input("Confirm new password", type="password", key="set_tl_pw_confirm")
+            if st.button("Set password", key="set_tl_pw_button"):
+                if not tl_new_pw1:
+                    st.error("Enter a password.")
+                elif tl_new_pw1 != tl_new_pw2:
+                    st.error("Passwords don't match.")
+                else:
+                    err = db.set_team_lead_password(tl_pw_lead["id"], team_lead_auth.hash_password(tl_new_pw1))
+                    if err:
+                        ss["_tl_pw_msg"] = ("error", f"Could not set password for {tl_pw_lead['name']}: {err}")
+                    else:
+                        ss["_tl_pw_msg"] = (
+                            "ok",
+                            f"Password set for {tl_pw_lead['name']} — they can now sign in on Team Lead Dashboard.",
                         )
                     st.rerun()
 
