@@ -17,7 +17,16 @@ REVIEWER_NAMES = ["Erwin Bagnol", "Weng Yee", "Kristine Lariosa"]
 # Conversations authored/handled by these people are never offered up as
 # something to sample, and they're excluded from the auto-learned agent
 # roster.
-EXCLUDED_AGENT_WORDS = {"kristine", "weng", "erwin"}
+#
+# "erwin" was dropped from this set on 2026-10-03: Erwin Bagnol's Intercom
+# admin account (id 9817286, display name "Erwin") turned out to be
+# actively handling frontline tickets (400+ conversations), and Weng
+# confirmed he should now be tracked and QA'd like any other agent, under
+# Kristine's team. If ZEVO ever adds a reviewer-only "Erwin" whose tickets
+# should stay out of the roster, exclude that specific admin id in code
+# rather than re-adding "erwin" here — a word match would block every
+# agent who happens to share that first name.
+EXCLUDED_AGENT_WORDS = {"kristine", "weng"}
 
 # Full Intercom admin display names that are shared inboxes, bots, or
 # non-frontline stakeholders rather than real agents (e.g. a shared support
@@ -48,6 +57,12 @@ CONCERN_TYPES = [
 ]
 
 RENTER_HOST_OPTIONS = ["", "Renter", "Host", "Other Entity"]
+
+# Which support channel a QA audit came from. "Chat" covers every audit
+# logged so far (all sourced from Intercom conversations); "Phone" is for
+# the Phone Support Ticket evaluations planned for later — see QA Log's
+# Audit log filter and lib/qa_form.py.
+CHANNEL_OPTIONS = ["Chat", "Phone"]
 
 # key, label, max points, allowed score options
 RUBRIC = [
