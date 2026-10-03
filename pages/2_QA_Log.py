@@ -353,10 +353,11 @@ if auth.current_reviewer() == "Weng Yee":
                 st.rerun()
 
 # ---------- manage team leads ----------
-# Visible only to Weng, same reasoning as Manage agents above. The 3 team
-# leads themselves are fixed (seeded by sql/schema.sql / the 2026-10-03
-# migration) — this panel only sets/resets their Team Lead Dashboard
-# password, same pattern as an agent's My Dashboard password.
+# Visible only to Weng, same reasoning as Manage agents above. The 3 real
+# team leads are seeded by sql/schema.sql / the 2026-10-03 migration, but
+# aren't fixed — this panel also lets a reviewer add or remove one (e.g. a
+# 4th team lead later, or correcting a typo'd one), plus set/reset their
+# Team Lead Dashboard password, same pattern as an agent's My Dashboard one.
 if auth.current_reviewer() == "Weng Yee":
     tl_pw_msg = ss.pop("_tl_pw_msg", None)
     if tl_pw_msg:
@@ -369,7 +370,47 @@ if auth.current_reviewer() == "Weng Yee":
             "into, the agents assigned to them (QA Log → Manage agents → Assign a team lead) — "
             "read-only, no edit access. They can change it themselves afterward."
         )
+
+        st.markdown("**Add a team lead**")
+        with st.form("add_team_lead_form", clear_on_submit=True):
+            new_tl_name = st.text_input("Name")
+            tl_add_submitted = st.form_submit_button("Add team lead")
+        if tl_add_submitted:
+            new_tl_id, err = db.create_team_lead(new_tl_name)
+            if err:
+                ss["_tl_pw_msg"] = ("error", f"Could not add {new_tl_name.strip()}: {err}")
+            else:
+                ss["_tl_pw_msg"] = (
+                    "ok",
+                    f"Added {new_tl_name.strip()} — set a password for them below before they can sign in.",
+                )
+            st.rerun()
+
         team_leads = sorted(db.list_team_leads(), key=lambda t: (t.get("name") or "").lower())
+
+        st.markdown("**Remove a team lead**")
+        st.caption(
+            "Any agent currently assigned to them is automatically unassigned, not deleted — "
+            "their past QA entries are untouched, they just no longer roll up under anyone "
+            "until reassigned (QA Log → Manage agents → Assign a team lead)."
+        )
+        remove_tl_options = ["Select a team lead..."] + [f'{t["name"]} ({t["id"]})' for t in team_leads]
+        remove_tl_choice = st.selectbox("Team lead to remove", remove_tl_options, key="remove_tl_select")
+        if remove_tl_choice != "Select a team lead...":
+            remove_tl = team_leads[remove_tl_options.index(remove_tl_choice) - 1]
+            remove_tl_confirm = st.checkbox(
+                f"Yes, remove {remove_tl['name']} — I understand it can't be undone.",
+                key="remove_tl_confirm",
+            )
+            if st.button("Remove", type="primary", disabled=not remove_tl_confirm, key="remove_tl_button"):
+                err = db.delete_team_lead(remove_tl["id"])
+                if err:
+                    ss["_tl_pw_msg"] = ("error", f"Could not remove {remove_tl['name']}: {err}")
+                else:
+                    ss["_tl_pw_msg"] = ("ok", f"Removed {remove_tl['name']} from the team lead directory.")
+                st.rerun()
+
+        st.markdown("**Set or reset a team lead's dashboard password**")
         tl_pw_options = ["Select a team lead..."] + [f'{t["name"]} ({t["id"]})' for t in team_leads]
         tl_pw_choice = st.selectbox("Team lead", tl_pw_options, key="set_tl_pw_select")
         if tl_pw_choice != "Select a team lead...":
