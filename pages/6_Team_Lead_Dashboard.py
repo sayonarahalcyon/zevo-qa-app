@@ -43,7 +43,7 @@ if ss.get("tl_open_agent_id"):
         st.warning("That agent is no longer assigned to your team.")
         st.stop()
     st.subheader(agent["name"])
-    agent_dashboard.render(agent, show_dispute_form=False)
+    agent_dashboard.render(agent, submitted_by=lead["name"])
     st.stop()
 
 # ---------- team rollup ----------
