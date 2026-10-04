@@ -100,10 +100,34 @@ def render(
         st.info(f"No evaluations {period.phrase}." if not period.is_all_time else "No QA evaluations on file yet.")
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Evaluations", total)
-    c2.metric("Avg Score", avg_score if avg_score is not None else "—")
-    c3.metric("Pass Rate", f"{pass_rate}%" if pass_rate is not None else "—")
-    c4.metric("This Week (of 3)", f"{week_count} / 3")
+    # The "?" bubbles spell out how each number is calculated. Worded neutrally
+    # (not "you"/"your") because a team lead sees this same view of an agent.
+    c1.metric(
+        "Total Evaluations",
+        total,
+        help=f"The number of non-test evaluations logged {period.phrase}. Test audits are never counted.",
+    )
+    c2.metric(
+        "Avg Score",
+        avg_score if avg_score is not None else "—",
+        help=f"The average total score (out of 100) across the {total} non-test evaluations logged {period.phrase}.",
+    )
+    c3.metric(
+        "Pass Rate",
+        f"{pass_rate}%" if pass_rate is not None else "—",
+        help=(
+            f"The share of the {total} non-test evaluations logged {period.phrase} that scored PASS "
+            "(85 or higher out of 100)."
+        ),
+    )
+    c4.metric(
+        "This Week (of 3)",
+        f"{week_count} / 3",
+        help=(
+            "How many evaluations have been logged this calendar week (Monday to Sunday), out of the 3 "
+            "expected per agent each week. Always the current week, whatever period is selected above."
+        ),
+    )
 
     st.divider()
 
