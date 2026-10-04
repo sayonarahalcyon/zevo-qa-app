@@ -9,12 +9,11 @@ agents → "Assign a team lead" — that assignment is the whole source of truth
 for both the rollup below and who can be drilled into.
 """
 
-import calendar
 from datetime import date, timedelta
 
 import streamlit as st
 
-from lib import agent_dashboard, db, team_lead_auth, ui
+from lib import agent_dashboard, db, period_picker, team_lead_auth, ui
 
 st.set_page_config(page_title="Team Lead Dashboard — Ticket QA Sampler", page_icon=ui.LOGO_URL, layout="wide")
 ui.inject_style()
@@ -33,13 +32,10 @@ lead = team_lead_auth.current_team_lead()
 ss = st.session_state
 ss.setdefault("tl_open_agent_id", None)
 
-# Streamlit drops a widget's state on any run where it isn't rendered, and the
-# drill-down below st.stop()s before the period picker is drawn. Re-assigning
-# the values here keeps the team lead's chosen period when they come back from
-# viewing one agent, instead of snapping back to the default.
-for _k in ("tl_period_mode", "tl_period_week", "tl_period_month"):
-    if _k in ss:
-        ss[_k] = ss[_k]
+# The drill-down below st.stop()s before the period pickers are drawn, and
+# Streamlit drops a widget's state on any run where it isn't drawn — so carry
+# both the rollup's picker and the per-agent picker across (lib/period_picker).
+period_picker.keep_state("tl_period", "agent_dash")
 
 # ---------- drill-down into one agent ----------
 if ss.get("tl_open_agent_id"):
@@ -87,80 +83,13 @@ today = date.today()
 week_monday = today - timedelta(days=today.weekday())
 week_sunday = week_monday + timedelta(days=6)
 
-
-def _parse_date(value) -> date | None:
-    try:
-        return date.fromisoformat(str(value)[:10])
-    except (TypeError, ValueError):
-        return None
-
-
-def _fmt_day(d: date) -> str:
-    return f"{d.strftime('%b')} {d.day}"
-
-
-def _week_label(monday: date) -> str:
-    sunday = monday + timedelta(days=6)
-    label = f"{_fmt_day(monday)} – {_fmt_day(sunday)}, {sunday.year}"
-    return f"{label} (this week)" if monday == week_monday else label
-
-
-def _month_label(first: date) -> str:
-    label = first.strftime("%B %Y")
-    return f"{label} (this month)" if (first.year, first.month) == (today.year, today.month) else label
-
-
 # ---------- period picker ----------
 # Every figure below (headline tiles, Pass/Coaching/Fail, the vs.-company
 # comparison, and the per-agent Audits/Avg Score/Status columns) is computed
 # from the entries inside the chosen window. "To date" is the old all-time view.
-entry_dates = [d for d in (_parse_date(e.get("qa_date")) for e in metric_entries) if d is not None]
-earliest = min(entry_dates) if entry_dates else today
-
-week_options: list[date] = []
-_cursor = week_monday
-while _cursor >= earliest - timedelta(days=earliest.weekday()):
-    week_options.append(_cursor)
-    _cursor -= timedelta(days=7)
-
-month_options: list[date] = []
-_y, _m = today.year, today.month
-while (_y, _m) >= (earliest.year, earliest.month):
-    month_options.append(date(_y, _m, 1))
-    _m -= 1
-    if _m == 0:
-        _y, _m = _y - 1, 12
-
-PERIOD_MODES = ["Weekly", "Monthly", "To date"]
-ss.setdefault("tl_period_mode", "Monthly")  # default view; set via state so the key can also be restored after a drill-down
-pick_l, pick_r = st.columns([2, 3])
-with pick_l:
-    period_mode = st.radio("Show numbers for", PERIOD_MODES, horizontal=True, key="tl_period_mode")
-with pick_r:
-    if period_mode == "Weekly":
-        week_start = st.selectbox("Week", week_options, format_func=_week_label, key="tl_period_week")
-        period_start, period_end = week_start, week_start + timedelta(days=6)
-        period_label = f"the week of {_week_label(week_start).replace(' (this week)', '')}"
-    elif period_mode == "Monthly":
-        month_start = st.selectbox("Month", month_options, format_func=_month_label, key="tl_period_month")
-        period_start = month_start
-        period_end = date(month_start.year, month_start.month, calendar.monthrange(month_start.year, month_start.month)[1])
-        period_label = month_start.strftime("%B %Y")
-    else:
-        period_start = period_end = None
-        period_label = "to date"
-
-if period_start is None:
-    period_phrase = "all-time"
-    period_entries = metric_entries
-else:
-    period_phrase = f"in {period_label}"
-    period_entries = [
-        e
-        for e in metric_entries
-        if (d := _parse_date(e.get("qa_date"))) is not None and period_start <= d <= period_end
-    ]
-    st.caption(f"Showing {period_start.isoformat()} to {period_end.isoformat()}.")
+period = period_picker.pick(metric_entries, key_prefix="tl_period")
+period_phrase = period.phrase
+period_entries = period.filter(metric_entries)
 
 
 def _entries_for(agent: dict, pool: list[dict]) -> list[dict]:
