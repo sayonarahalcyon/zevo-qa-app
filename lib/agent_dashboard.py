@@ -5,6 +5,11 @@ into any one of its agents using the exact same summary metrics, score
 trend, category breakdown, and audit list an agent sees of themselves —
 rather than a second, drifting copy of this rendering.
 
+Since 2026-10-04 render() opens with a Weekly / Monthly / To date picker
+(lib/period_picker) and everything below it follows the chosen period, except
+the "This Week (of 3)" quota tile, which is always the current calendar week.
+period_key namespaces the picker's widget keys.
+
 render() doesn't handle sign-in/sign-out or whose dashboard this is — the
 caller owns that (My Dashboard shows its own agent_auth sign-out and "viewing
 your evaluations" caption; the Team Lead Dashboard shows a back button and
@@ -28,7 +33,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from lib import db, disputes
+from lib import db, disputes, period_picker
 from lib.constants import CRITICAL_ERRORS, RUBRIC
 from lib.intercom_client import conversation_url
 from lib.ui import result_badge_md
@@ -42,7 +47,13 @@ _FAIL = "#cf4a5c"
 _MUTED = "#5c6f66"
 
 
-def render(agent: dict, *, show_dispute_form: bool = True, submitted_by: str | None = None) -> None:
+def render(
+    agent: dict,
+    *,
+    show_dispute_form: bool = True,
+    submitted_by: str | None = None,
+    period_key: str = "agent_dash",
+) -> None:
     entries = [
         e
         for e in db.list_qa_entries()
@@ -51,36 +62,47 @@ def render(agent: dict, *, show_dispute_form: bool = True, submitted_by: str | N
     # Same rule as the QA Log dashboard and Home: test audits never count
     # toward an agent's own numbers, though they still show up (marked) in
     # the list below.
-    real_entries = [e for e in entries if not e.get("is_test")]
-    test_count = len(entries) - len(real_entries)
+    all_real_entries = [e for e in entries if not e.get("is_test")]
 
-    if not real_entries:
+    if not all_real_entries:
         st.info("No QA evaluations on file yet.")
         return
 
+    # ---------- period picker ----------
+    # Weekly / Monthly / To date (lib/period_picker). Everything below — the
+    # summary, the trend, the category breakdown, and the evaluation list — is
+    # limited to the chosen window; the weekly-quota tile is the one exception
+    # (always the current calendar week).
+    period = period_picker.pick(entries, key_prefix=period_key)
+    entries = period.filter(entries)
+    real_entries = [e for e in entries if not e.get("is_test")]
+    test_count = len(entries) - len(real_entries)
+
     # ---------- summary ----------
     total = len(real_entries)
-    score_sum = sum(e.get("total_score") or 0 for e in real_entries)
-    avg_score = round(score_sum / total, 1)
-    pass_count = sum(1 for e in real_entries if e.get("result") == "PASS")
-    pass_rate = round(pass_count / total * 100, 1)
+    avg_score = round(sum(e.get("total_score") or 0 for e in real_entries) / total, 1) if total else None
+    pass_rate = (
+        round(sum(1 for e in real_entries if e.get("result") == "PASS") / total * 100, 1) if total else None
+    )
 
     today = date.today()
     week_monday = today - timedelta(days=today.weekday())
     week_sunday = week_monday + timedelta(days=6)
     week_count = sum(
         1
-        for e in real_entries
+        for e in all_real_entries
         if e.get("qa_date") and week_monday.isoformat() <= e["qa_date"] <= week_sunday.isoformat()
     )
 
     if test_count:
         st.caption(f"🧪 {test_count} test audit{'s' if test_count != 1 else ''} excluded from these numbers.")
+    if not entries:
+        st.info(f"No evaluations {period.phrase}." if not period.is_all_time else "No QA evaluations on file yet.")
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Total Evaluations", total)
-    c2.metric("Avg Score", avg_score)
-    c3.metric("Pass Rate", f"{pass_rate}%")
+    c2.metric("Avg Score", avg_score if avg_score is not None else "—")
+    c3.metric("Pass Rate", f"{pass_rate}%" if pass_rate is not None else "—")
     c4.metric("This Week (of 3)", f"{week_count} / 3")
 
     st.divider()
@@ -127,7 +149,7 @@ def render(agent: dict, *, show_dispute_form: bool = True, submitted_by: str | N
         st.altair_chart((pass_rule + coach_rule + line).properties(height=280), use_container_width=True)
         st.caption("Dashed lines mark the PASS (85) and COACHING (70) thresholds.")
     else:
-        st.caption("Not enough scored evaluations yet to show a trend — check back after the next one.")
+        st.caption("Not enough scored evaluations in this period to show a trend." if not period.is_all_time else "Not enough scored evaluations yet to show a trend — check back after the next one.")
 
     st.divider()
 
@@ -184,7 +206,7 @@ def render(agent: dict, *, show_dispute_form: bool = True, submitted_by: str | N
         ]
         st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
     else:
-        st.caption("No scored evaluations yet.")
+        st.caption("No scored evaluations in this period." if not period.is_all_time else "No scored evaluations yet.")
 
     st.divider()
 
@@ -193,6 +215,8 @@ def render(agent: dict, *, show_dispute_form: bool = True, submitted_by: str | N
     st.caption("Most recent first. Expand one to see the full scoring breakdown, reviewer remarks, and comments.")
 
     sorted_entries = sorted(entries, key=lambda e: (e.get("qa_date") or "", e.get("updated_at") or ""), reverse=True)
+    if not sorted_entries:
+        st.caption("No evaluations in this period.")
 
     for e in sorted_entries:
         ticket_id = e.get("ticket_id") or ""
