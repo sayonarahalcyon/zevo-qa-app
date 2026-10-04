@@ -132,7 +132,14 @@ def render(
     st.divider()
 
     # ---------- score trend ----------
-    st.subheader("Score trend")
+    st.subheader(
+        "Score trend",
+        help=(
+            "Each dot is one non-test evaluation, plotted by its date and total score (out of 100), for the "
+            f"period selected above ({period.label}). The dashed lines mark the PASS (85) and COACHING (70) "
+            "thresholds. At least two scored evaluations in the period are needed to draw the line."
+        ),
+    )
     trend_rows = sorted(
         (
             {"Date": e["qa_date"], "Score": e.get("total_score") or 0}
@@ -178,7 +185,14 @@ def render(
     st.divider()
 
     # ---------- rubric category breakdown ----------
-    st.subheader("Category breakdown")
+    st.subheader(
+        "Category breakdown",
+        help=(
+            "For each rubric category, the average points scored across the non-test evaluations in the "
+            f"period selected above ({period.label}), shown as a share of that category's maximum. "
+            "Green is 85% or more of the maximum, amber is 60 to 84%, and red is below 60%."
+        ),
+    )
     st.caption("Average score in each rubric category, as a share of that category's max points.")
 
     cat_rows = []
@@ -235,7 +249,14 @@ def render(
     st.divider()
 
     # ---------- full list with remarks ----------
-    st.subheader("All evaluations")
+    st.subheader(
+        "All evaluations",
+        help=(
+            f"Every evaluation dated in the period selected above ({period.label}), most recent first, "
+            "including any test audits (marked 🧪 TEST, never counted in the numbers). Open one to see the "
+            "score for each category, the reviewer's remarks, and to ask a question or dispute the score."
+        ),
+    )
     st.caption("Most recent first. Expand one to see the full scoring breakdown, reviewer remarks, and comments.")
 
     sorted_entries = sorted(entries, key=lambda e: (e.get("qa_date") or "", e.get("updated_at") or ""), reverse=True)
