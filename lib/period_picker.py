@@ -3,7 +3,7 @@ and the per-agent dashboard (My Dashboard, and the team lead's drill-down into
 one agent).
 
 pick() draws a radio (Weekly / Monthly / To date) and, for Weekly or Monthly, a
-dropdown of calendar weeks (Mon-Sun) or months — newest first, reaching back to
+dropdown of calendar weeks (Sun-Sat, see lib/weeks.py) or months — newest first, reaching back to
 the earliest audit date it was given, and always including the current week /
 month even if nothing has been logged in it yet. It returns a Period the caller
 uses to filter its own entries; the picker never touches the database itself.
@@ -20,6 +20,8 @@ from datetime import date, timedelta
 
 import streamlit as st
 
+from lib import weeks
+
 PERIOD_MODES = ["Weekly", "Monthly", "To date"]
 
 
@@ -34,9 +36,9 @@ def _fmt_day(d: date) -> str:
     return f"{d.strftime('%b')} {d.day}"
 
 
-def _week_range_label(monday: date) -> str:
-    sunday = monday + timedelta(days=6)
-    return f"{_fmt_day(monday)} – {_fmt_day(sunday)}, {sunday.year}"
+def _week_range_label(first: date) -> str:
+    last = first + timedelta(days=6)
+    return f"{_fmt_day(first)} – {_fmt_day(last)}, {last.year}"
 
 
 @dataclass(frozen=True)
@@ -83,14 +85,14 @@ def pick(
     today: date | None = None,
 ) -> Period:
     today = today or date.today()
-    week_monday = today - timedelta(days=today.weekday())
+    this_week_first = weeks.week_start(today)
 
     dates = [d for d in (_parse_date(e.get("qa_date")) for e in entries) if d is not None]
     earliest = min(dates) if dates else today
 
     week_options: list[date] = []
-    cursor = week_monday
-    while cursor >= earliest - timedelta(days=earliest.weekday()):
+    cursor = this_week_first
+    while cursor >= weeks.week_start(earliest):
         week_options.append(cursor)
         cursor -= timedelta(days=7)
 
@@ -102,9 +104,9 @@ def pick(
         if m == 0:
             y, m = y - 1, 12
 
-    def week_label(monday: date) -> str:
-        label = _week_range_label(monday)
-        return f"{label} (this week)" if monday == week_monday else label
+    def week_label(first: date) -> str:
+        label = _week_range_label(first)
+        return f"{label} (this week)" if first == this_week_first else label
 
     def month_label(first: date) -> str:
         label = first.strftime("%B %Y")
@@ -120,13 +122,13 @@ def pick(
         mode = st.radio("Show numbers for", PERIOD_MODES, horizontal=True, key=mode_key)
     with right:
         if mode == "Weekly":
-            monday = st.selectbox("Week", week_options, format_func=week_label, key=f"{key_prefix}_week")
+            first = st.selectbox("Week", week_options, format_func=week_label, key=f"{key_prefix}_week")
             period = Period(
                 "Weekly",
-                monday,
-                monday + timedelta(days=6),
-                _week_range_label(monday),
-                f"in the week of {_week_range_label(monday)}",
+                first,
+                first + timedelta(days=6),
+                _week_range_label(first),
+                f"in the week of {_week_range_label(first)}",
             )
         elif mode == "Monthly":
             first = st.selectbox("Month", month_options, format_func=month_label, key=f"{key_prefix}_month")

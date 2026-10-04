@@ -15,11 +15,11 @@ reason "Dispute"), which keeps logging to qa_entries.edit_log exactly as
 before. render_reviewer_panel() links straight into that existing flow.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 import streamlit as st
 
-from lib import auth, db
+from lib import auth, db, weeks
 from lib.constants import DISPUTE_CATEGORIES
 
 
@@ -113,18 +113,18 @@ def _render_existing(d: dict) -> None:
 
 
 def _week_start(created_at: str | None) -> date | None:
-    """Monday of the week `created_at` falls in, or None if unparseable."""
+    """Sunday that starts the week `created_at` falls in, or None if unparseable."""
     if not created_at:
         return None
     try:
         dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
     except ValueError:
         return None
-    return dt.date() - timedelta(days=dt.weekday())
+    return weeks.week_start(dt.date())
 
 
 def _group_by_week(disputes: list[dict]) -> list[tuple[date | None, list[dict]]]:
-    """Groups (already newest-first) disputes by the Monday of their week,
+    """Groups (already newest-first) disputes by the Sunday that starts their week,
     most recent week first. Each group keeps the incoming (newest-first)
     order. Undated rows land in their own group, sorted last."""
     groups: dict[date | None, list[dict]] = {}

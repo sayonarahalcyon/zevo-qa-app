@@ -27,13 +27,13 @@ noting who actually filed it, visible to both the agent on My Dashboard and
 the reviewer in the Questions & Disputes inbox.
 """
 
-from datetime import date, timedelta
+from datetime import date
 
 import altair as alt
 import pandas as pd
 import streamlit as st
 
-from lib import db, disputes, period_picker
+from lib import db, disputes, period_picker, weeks
 from lib.constants import CRITICAL_ERRORS, RUBRIC
 from lib.intercom_client import conversation_url
 from lib.ui import result_badge_md
@@ -86,13 +86,7 @@ def render(
     )
 
     today = date.today()
-    week_monday = today - timedelta(days=today.weekday())
-    week_sunday = week_monday + timedelta(days=6)
-    week_count = sum(
-        1
-        for e in all_real_entries
-        if e.get("qa_date") and week_monday.isoformat() <= e["qa_date"] <= week_sunday.isoformat()
-    )
+    week_count = sum(1 for e in all_real_entries if weeks.in_week(e.get("qa_date"), today))
 
     if test_count:
         st.caption(f"🧪 {test_count} test audit{'s' if test_count != 1 else ''} excluded from these numbers.")
@@ -124,7 +118,7 @@ def render(
         "This Week (of 3)",
         f"{week_count} / 3",
         help=(
-            "How many evaluations have been logged this calendar week (Monday to Sunday), out of the 3 "
+            "How many evaluations have been logged this calendar week (Sunday to Saturday), out of the 3 "
             "expected per agent each week. Always the current week, whatever period is selected above."
         ),
     )
