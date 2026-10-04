@@ -7,11 +7,11 @@ snapshot of QA activity, sign-in, and links to the other pages. Home has no
 sidebar content of its own; the page nav is all that shows there.
 """
 
-from datetime import date, timedelta
+from datetime import date
 
 import streamlit as st
 
-from lib import auth, db, ui
+from lib import auth, db, ui, weeks
 
 st.set_page_config(page_title="ZEVO Quality Evaluation", page_icon=ui.LOGO_URL, layout="wide")
 ui.inject_style()
@@ -48,8 +48,7 @@ if entries:
         avg_score = round(score_sum / total, 1)
         pass_count = sum(1 for e in real_entries if e.get("result") == "PASS")
         pass_rate = round(pass_count / total * 100, 1)
-        week_start_iso = (date.today() - timedelta(days=7)).isoformat()
-        this_week = sum(1 for e in real_entries if (e.get("qa_date") or "") >= week_start_iso)
+        this_week = sum(1 for e in real_entries if weeks.in_week(e.get("qa_date"), date.today()))
     else:
         avg_score = pass_rate = this_week = None
 

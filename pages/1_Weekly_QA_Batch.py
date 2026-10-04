@@ -12,7 +12,7 @@ from datetime import date, timedelta
 import streamlit as st
 import streamlit.components.v1 as components
 
-from lib import auth, db, sampling, ui
+from lib import auth, db, sampling, ui, weeks
 from lib.intercom_client import IntercomError, conversation_url, get_conversation, search_conversations
 from lib.ticket_view import render_ticket
 
@@ -81,12 +81,9 @@ with col_batch:
     with st.container(border=True):
         st.subheader("Weekly QA batch")
 
-        def monday_of(d: date) -> date:
-            return d - timedelta(days=d.weekday())
-
-        _this_monday = monday_of(date.today())
-        ss.setdefault("batch_range_start", _this_monday)
-        ss.setdefault("batch_range_end", _this_monday + timedelta(days=6))
+        _this_week_start, _this_week_end = weeks.week_bounds(date.today())
+        ss.setdefault("batch_range_start", _this_week_start)
+        ss.setdefault("batch_range_end", _this_week_end)
         ss.setdefault("batch_open_ticket_id", None)
 
         agent_options = ["Select an agent..."] + agent_names

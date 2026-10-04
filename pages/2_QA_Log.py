@@ -1,11 +1,11 @@
 """QA Log — dashboard, per-agent rollup, filterable audit log, scoring guide."""
 
-from datetime import date, timedelta
+from datetime import date
 
 import pandas as pd
 import streamlit as st
 
-from lib import agent_auth, auth, db, sheets_backup, team_lead_auth, ui
+from lib import agent_auth, auth, db, sheets_backup, team_lead_auth, ui, weeks
 from lib.constants import CHANNEL_OPTIONS, CRITICAL_ERRORS, RUBRIC, RUBRIC_GUIDE, is_excluded_agent_name
 from lib.intercom_client import IntercomError, conversation_url, get_conversation, list_admins
 from lib.ticket_view import render_ticket
@@ -559,16 +559,12 @@ st.divider()
 # ---------- per-agent rollup ----------
 st.subheader("Per-agent rollup")
 today = date.today()
-week_monday = today - timedelta(days=today.weekday())
-week_sunday = week_monday + timedelta(days=6)
 
 rollup_rows = []
 for aid, name in sorted(agents_by_id.items(), key=lambda kv: kv[1].lower()):
     mine = [e for e in metric_entries if e.get("agent_id") == aid or (e.get("agent_name") or "").lower() == name.lower()]
     avg = round(sum(e.get("total_score") or 0 for e in mine) / len(mine), 1) if mine else None
-    week_count = sum(
-        1 for e in mine if e.get("qa_date") and week_monday.isoformat() <= e["qa_date"] <= week_sunday.isoformat()
-    )
+    week_count = sum(1 for e in mine if weeks.in_week(e.get("qa_date"), today))
     rollup_rows.append(
         {
             "Agent": name,

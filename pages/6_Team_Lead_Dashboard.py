@@ -9,11 +9,11 @@ agents → "Assign a team lead" — that assignment is the whole source of truth
 for both the rollup below and who can be drilled into.
 """
 
-from datetime import date, timedelta
+from datetime import date
 
 import streamlit as st
 
-from lib import agent_dashboard, db, period_picker, team_lead_auth, ui
+from lib import agent_dashboard, db, period_picker, team_lead_auth, ui, weeks
 
 st.set_page_config(page_title="Team Lead Dashboard — Ticket QA Sampler", page_icon=ui.LOGO_URL, layout="wide")
 ui.inject_style()
@@ -80,8 +80,6 @@ my_agent_names = {(a.get("name") or "").lower() for a in my_agents}
 
 
 today = date.today()
-week_monday = today - timedelta(days=today.weekday())
-week_sunday = week_monday + timedelta(days=6)
 
 # ---------- period picker ----------
 # Every figure below (headline tiles, Pass/Coaching/Fail, the vs.-company
@@ -198,11 +196,7 @@ for a in my_agents:
     # is on screen, so it reads from the full set of entries.
     mine = _entries_for(a, period_entries)
     avg = round(sum(e.get("total_score") or 0 for e in mine) / len(mine), 1) if mine else None
-    week_count = sum(
-        1
-        for e in _entries_for(a, metric_entries)
-        if e.get("qa_date") and week_monday.isoformat() <= e["qa_date"] <= week_sunday.isoformat()
-    )
+    week_count = sum(1 for e in _entries_for(a, metric_entries) if weeks.in_week(e.get("qa_date"), today))
     status = ("🟢 Pass" if (avg or 0) >= 85 else "🔴 Fail") if avg is not None else "—"
 
     r1, r2, r3, r4, r5, r6 = st.columns(row_widths)
