@@ -463,6 +463,21 @@ if auth.current_reviewer() == "Weng Yee":
                 )
             st.rerun()
 
+        st.caption(
+            "Questions and disputes are mirrored to their own tabs (Disputes and Questions) in the same "
+            "sheet as they are filed and resolved. Use this to rebuild both tabs from Supabase."
+        )
+        if st.button("Resync disputes and questions to backup sheet", use_container_width=True):
+            n_disputes, n_questions, err = sheets_backup.resync_disputes(db.list_disputes(), entries)
+            if err:
+                ss["_backup_sync_msg"] = ("error", f"Could not resync disputes and questions: {err}")
+            else:
+                ss["_backup_sync_msg"] = (
+                    "ok",
+                    f"Resynced {n_disputes} dispute(s) and {n_questions} question(s) to the backup sheet.",
+                )
+            st.rerun()
+
 # ---------- delete a QA entry ----------
 # Visible only to Weng — same reasoning as the two sections above. Deleting
 # the qa_entries row alone isn't always enough to make a ticket pullable
