@@ -8,6 +8,7 @@ store). Tables mirror the original collections 1:1 — see sql/schema.sql:
   qa_entries               -- one row per scored QA audit (id = Intercom conversation id)
   historical_qa_entries    -- one-time read-only import from the retired QA Tracker sheet
   disputes                 -- agent-submitted questions/disputes from My Dashboard (id = uuid4)
+  login_events             -- one row per successful agent / team lead sign-in
 """
 
 import re
@@ -469,6 +470,53 @@ def reopen_dispute(dispute_id: str) -> str | None:
         return str(e)
 
 
+# ---------- sign-in activity ----------
+
+def record_login(role: str, person_id: str, person_name: str) -> None:
+    """Logs one successful agent or team lead sign-in. Best-effort and
+    silent: a missing table (migration not run yet) or a database hiccup must
+    never stop someone from signing in, so every failure is swallowed."""
+    try:
+        db = get_client()
+        if not db:
+            return
+        db.table("login_events").insert(
+            {"role": role, "person_id": str(person_id), "person_name": person_name}
+        ).execute()
+        list_login_events.clear()
+    except Exception:
+        pass
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def list_login_events() -> list[dict]:
+    """Every recorded sign-in, newest first. Returns [] if the table doesn't
+    exist yet. Paged so the 1000-row default API cap can't silently
+    undercount."""
+    db = get_client()
+    if not db:
+        return []
+    rows: list[dict] = []
+    try:
+        start = 0
+        while True:
+            res = (
+                db.table("login_events")
+                .select("role,person_id,person_name,signed_in_at")
+                .order("signed_in_at", desc=True)
+                .range(start, start + 999)
+                .execute()
+            )
+            batch = res.data or []
+            rows.extend(batch)
+            if len(batch) < 1000 or start >= 49000:
+                break
+            start += 1000
+        return rows
+    except Exception:
+        return rows
+
+
 def clear_cache() -> None:
     """Call after any write so the next read reflects it immediately."""
     list_agents.clear()
@@ -476,3 +524,4 @@ def clear_cache() -> None:
     list_reviewed.clear()
     list_qa_entries.clear()
     list_disputes.clear()
+    list_login_events.clear()

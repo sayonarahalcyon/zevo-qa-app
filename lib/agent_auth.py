@@ -64,6 +64,7 @@ def render_sign_in() -> None:
             )
         elif agent and verify_password(pw, agent.get("password_hash")):
             st.session_state[SESSION_KEY] = {"id": agent["id"], "name": agent["name"]}
+            db.record_login("agent", agent["id"], agent["name"])
             st.rerun()
         else:
             st.error("Wrong password.")
