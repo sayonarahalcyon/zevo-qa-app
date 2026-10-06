@@ -19,7 +19,7 @@ from datetime import date, datetime
 
 import streamlit as st
 
-from lib import auth, db, weeks
+from lib import auth, db, sheets_backup, weeks
 from lib.constants import DISPUTE_CATEGORIES
 
 
@@ -91,11 +91,25 @@ def render_agent_form(entry: dict, agent: dict, *, submitted_by: str | None = No
                 )
                 if err:
                     st.error(f"Couldn't submit: {err}")
-                elif submitted_by:
-                    st.success(f"Submitted on {agent.get('name', 'the agent')}'s behalf — a reviewer will follow up here.")
-                    st.rerun()
                 else:
-                    st.success("Submitted — a reviewer will follow up here.")
+                    # list_disputes() is newest-first, so the first match is the row just saved.
+                    just_saved = next(
+                        (
+                            d
+                            for d in db.list_disputes()
+                            if d.get("entry_id") == str(entry_id)
+                            and d.get("agent_name") == agent["name"]
+                            and d.get("message") == message.strip()
+                        ),
+                        None,
+                    )
+                    _mirror_to_backup_sheet(just_saved)
+                    if submitted_by:
+                        st.success(
+                            f"Submitted on {agent.get('name', 'the agent')}'s behalf — a reviewer will follow up here."
+                        )
+                    else:
+                        st.success("Submitted — a reviewer will follow up here.")
                     st.rerun()
 
 
@@ -110,6 +124,24 @@ def _render_existing(d: dict) -> None:
         st.caption("Categories: " + ", ".join(d["categories"]))
     if resolved:
         st.info(f"**Reviewer response ({d.get('resolved_by') or '—'}):** {d.get('reviewer_response') or ''}")
+
+
+def _mirror_to_backup_sheet(dispute: dict | None) -> None:
+    """Best-effort copy of one question/dispute row into the Google Sheet
+    backup (its own Disputes or Questions tab). Never raises and never blocks
+    the real save — `db` is the source of truth; a full resync from QA Log can
+    always rebuild the tabs."""
+    try:
+        if not dispute:
+            return
+        entry = next((e for e in db.list_qa_entries() if e.get("id") == dispute.get("entry_id")), None)
+        sheets_backup.upsert_dispute(dispute, entry)
+    except Exception:
+        pass
+
+
+def _fresh_dispute(dispute_id: str) -> dict | None:
+    return next((d for d in db.list_disputes() if d.get("id") == dispute_id), None)
 
 
 def _week_start(created_at: str | None) -> date | None:
@@ -176,6 +208,7 @@ def _render_dispute_row(d: dict, entries_by_id: dict, ss) -> None:
                 if err:
                     st.error(err)
                 else:
+                    _mirror_to_backup_sheet(_fresh_dispute(d["id"]))
                     st.rerun()
         else:
             response = st.text_area("Response to agent", key=f"dispute_response_{d['id']}")
@@ -187,6 +220,7 @@ def _render_dispute_row(d: dict, entries_by_id: dict, ss) -> None:
                     if err:
                         st.error(err)
                     else:
+                        _mirror_to_backup_sheet(_fresh_dispute(d["id"]))
                         st.success("Marked resolved.")
                         st.rerun()
 
