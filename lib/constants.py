@@ -13,6 +13,10 @@ import unicodedata
 
 REVIEWER_NAMES = ["Erwin Bagnol", "Weng Yee", "Kristine Lariosa"]
 
+# Reviewers who can open the Team Lead Dashboard "as" any team lead (read-only,
+# no password needed). Not every reviewer: Erwin is deliberately left out.
+VIEW_AS_TEAM_LEAD_REVIEWERS = ["Weng Yee", "Kristine Lariosa"]
+
 # Names/words that identify a non-frontline reviewer rather than an agent.
 # Conversations authored/handled by these people are never offered up as
 # something to sample, and they're excluded from the auto-learned agent
