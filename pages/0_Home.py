@@ -1,4 +1,4 @@
-"""Ticket QA Sampler — Home (landing dashboard).
+"""ZEVO Quality Evaluation — Home (landing dashboard).
 
 Pulling and scoring a ticket happens on the Weekly QA Batch page (both the
 weekly batch pull and the Quick Sample single-random-ticket tool live there,

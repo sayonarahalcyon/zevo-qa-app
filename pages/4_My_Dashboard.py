@@ -15,7 +15,7 @@ import streamlit as st
 
 from lib import agent_auth, agent_dashboard, ui
 
-st.set_page_config(page_title="My Dashboard — Ticket QA Sampler", page_icon=ui.LOGO_URL, layout="wide")
+st.set_page_config(page_title="My Dashboard — ZEVO Quality Evaluation", page_icon=ui.LOGO_URL, layout="wide")
 ui.inject_style()
 
 # This page is meant to be opened through app.py (which decides what the sidebar

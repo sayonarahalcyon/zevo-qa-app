@@ -16,7 +16,7 @@ from lib import auth, db, sampling, ui, weeks
 from lib.intercom_client import IntercomError, conversation_url, get_conversation, search_conversations
 from lib.ticket_view import render_ticket
 
-st.set_page_config(page_title="Weekly QA Batch — Ticket QA Sampler", page_icon=ui.LOGO_URL, layout="wide")
+st.set_page_config(page_title="Weekly QA Batch — ZEVO Quality Evaluation", page_icon=ui.LOGO_URL, layout="wide")
 ui.inject_style()
 
 # ---------- reset unsaved ticket-selection state on a real browser reload ----------

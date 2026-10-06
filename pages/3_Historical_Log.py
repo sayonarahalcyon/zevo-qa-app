@@ -13,7 +13,7 @@ from lib import auth, db, ui
 from lib.constants import RUBRIC
 from lib.ui import result_badge_md
 
-st.set_page_config(page_title="Historical Log — Ticket QA Sampler", page_icon="🗄️", layout="wide")
+st.set_page_config(page_title="Historical Log — ZEVO Quality Evaluation", page_icon="🗄️", layout="wide")
 ui.inject_style()
 
 if not auth.is_signed_in():
