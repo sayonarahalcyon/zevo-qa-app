@@ -18,6 +18,15 @@ from lib import agent_auth, agent_dashboard, ui
 st.set_page_config(page_title="My Dashboard — Ticket QA Sampler", page_icon=ui.LOGO_URL, layout="wide")
 ui.inject_style()
 
+# This page is meant to be opened through app.py (which decides what the sidebar
+# shows). On the rare cold start where Streamlit runs this file directly from its
+# address, app.py never ran and the sidebar would list every page, so hide it.
+if not st.session_state.get("app_entry_ran"):
+    st.markdown(
+        "<style>[data-testid='stSidebar'], [data-testid='stSidebarCollapsedControl'] {display: none;}</style>",
+        unsafe_allow_html=True,
+    )
+
 ui.page_heading("My Dashboard")
 
 if not agent_auth.is_signed_in():
