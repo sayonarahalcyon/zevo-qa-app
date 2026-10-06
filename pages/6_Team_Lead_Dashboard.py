@@ -18,6 +18,15 @@ from lib import agent_dashboard, db, period_picker, team_lead_auth, ui, weeks
 st.set_page_config(page_title="Team Lead Dashboard — Ticket QA Sampler", page_icon=ui.LOGO_URL, layout="wide")
 ui.inject_style()
 
+# This page is meant to be opened through app.py (which decides what the sidebar
+# shows). On the rare cold start where Streamlit runs this file directly from its
+# address, app.py never ran and the sidebar would list every page, so hide it.
+if not st.session_state.get("app_entry_ran"):
+    st.markdown(
+        "<style>[data-testid='stSidebar'], [data-testid='stSidebarCollapsedControl'] {display: none;}</style>",
+        unsafe_allow_html=True,
+    )
+
 ui.page_heading("Team Lead Dashboard")
 
 if not team_lead_auth.is_signed_in():
