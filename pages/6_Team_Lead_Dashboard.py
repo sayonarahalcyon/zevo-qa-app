@@ -13,7 +13,8 @@ from datetime import date
 
 import streamlit as st
 
-from lib import agent_dashboard, db, period_picker, team_lead_auth, ui, weeks
+from lib import agent_dashboard, auth, db, period_picker, team_lead_auth, ui, weeks
+from lib.constants import VIEW_AS_TEAM_LEAD_REVIEWERS
 
 st.set_page_config(page_title="Team Lead Dashboard — Ticket QA Sampler", page_icon=ui.LOGO_URL, layout="wide")
 ui.inject_style()
@@ -29,17 +30,52 @@ if not st.session_state.get("app_entry_ran"):
 
 ui.page_heading("Team Lead Dashboard")
 
-if not team_lead_auth.is_signed_in():
+ss = st.session_state
+ss.setdefault("tl_open_agent_id", None)
+
+# ---------- "View as team lead" (Weng and Kristine only) ----------
+# A signed-in reviewer on the allowed list can open this page as any team lead
+# without their password. It is strictly read-only: no dispute can be filed on
+# an agent's behalf from here, no password is shown or changed, and nothing is
+# written. The selector is drawn on every run (including the drill-down) so its
+# state is never dropped.
+viewing_as = None
+if auth.current_reviewer() in VIEW_AS_TEAM_LEAD_REVIEWERS:
+    leads = sorted(db.list_team_leads(), key=lambda t: (t.get("name") or "").lower())
+    lead_names = [t["name"] for t in leads if t.get("name")]
+    NOT_VIEWING = "Not viewing as anyone"
+
+    def _switched_team_lead() -> None:
+        ss["tl_open_agent_id"] = None  # a different team lead's agent list: start from their rollup
+
+    with st.container(border=True):
+        st.markdown("**View as team lead**")
+        st.caption(
+            "For reviewers only. See exactly what a team lead sees, without their password. "
+            "Read-only: nothing can be changed or submitted from here."
+        )
+        picked = st.selectbox(
+            "Team lead",
+            [NOT_VIEWING] + lead_names,
+            key="tl_view_as_name",
+            on_change=_switched_team_lead,
+        )
+    viewing_as = next((t for t in leads if t.get("name") == picked), None)
+else:
+    ss.pop("tl_view_as_name", None)
+
+if viewing_as:
+    lead = {"id": viewing_as["id"], "name": viewing_as["name"]}
+    st.info(f"You are viewing as **{lead['name']}**. This is a read-only view for reviewers.")
+elif not team_lead_auth.is_signed_in():
     st.caption("Sign in to see a rollup of your team, and drill into any one agent's own dashboard.")
     left, mid, right = st.columns([1, 2, 1])
     with mid:
         with st.container(border=True):
             team_lead_auth.render_sign_in()
     st.stop()
-
-lead = team_lead_auth.current_team_lead()
-ss = st.session_state
-ss.setdefault("tl_open_agent_id", None)
+else:
+    lead = team_lead_auth.current_team_lead()
 
 # The drill-down below st.stop()s before the period pickers are drawn, and
 # Streamlit drops a widget's state on any run where it isn't drawn — so carry
@@ -57,15 +93,19 @@ if ss.get("tl_open_agent_id"):
         st.warning("That agent is no longer assigned to your team.")
         st.stop()
     st.subheader(agent["name"])
-    agent_dashboard.render(agent, submitted_by=lead["name"])
+    agent_dashboard.render(agent, submitted_by=lead["name"], show_dispute_form=not viewing_as)
     st.stop()
 
 # ---------- team rollup ----------
 top_l, top_r = st.columns([3, 1])
 with top_l:
-    st.caption(f"Viewing your team, **{lead['name']}**.")
+    if viewing_as:
+        st.caption(f"Viewing the team of **{lead['name']}**.")
+    else:
+        st.caption(f"Viewing your team, **{lead['name']}**.")
 with top_r:
-    team_lead_auth.render_sign_out()
+    if not viewing_as:
+        team_lead_auth.render_sign_out()
 
 all_agents = db.list_agents()
 my_agents = sorted(
@@ -74,9 +114,12 @@ my_agents = sorted(
 )
 
 if not my_agents:
-    st.info("No agents are assigned to you yet — ask a reviewer to assign some on the QA Log page (Manage agents).")
-    st.divider()
-    team_lead_auth.render_change_password()
+    if viewing_as:
+        st.info(f"No agents are assigned to {lead['name']} yet. Assign some on the QA Log page (Manage agents).")
+    else:
+        st.info("No agents are assigned to you yet — ask a reviewer to assign some on the QA Log page (Manage agents).")
+        st.divider()
+        team_lead_auth.render_change_password()
     st.stop()
 
 entries = db.list_qa_entries()
@@ -218,5 +261,6 @@ for a in my_agents:
         ss["tl_open_agent_id"] = a["id"]
         st.rerun()
 
-st.divider()
-team_lead_auth.render_change_password()
+if not viewing_as:
+    st.divider()
+    team_lead_auth.render_change_password()
