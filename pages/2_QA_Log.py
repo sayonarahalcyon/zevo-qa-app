@@ -6,7 +6,15 @@ import pandas as pd
 import streamlit as st
 
 from lib import agent_auth, auth, db, login_activity, sheets_backup, team_lead_auth, ui, weeks
-from lib.constants import CHANNEL_OPTIONS, CRITICAL_ERRORS, REVIEWER_NAMES, RUBRIC, RUBRIC_GUIDE, is_excluded_agent_name
+from lib.constants import (
+    CHANNEL_OPTIONS,
+    CRITICAL_ERRORS,
+    REVIEWER_NAMES,
+    RUBRIC,
+    RUBRIC_GUIDE,
+    SIGN_IN_ACTIVITY_REVIEWERS,
+    is_excluded_agent_name,
+)
 from lib.intercom_client import IntercomError, conversation_url, get_conversation, list_admins
 from lib.ticket_view import render_ticket
 from lib.ui import result_badge_md
@@ -479,9 +487,10 @@ if auth.current_reviewer() == "Weng Yee":
             st.rerun()
 
 # ---------- sign-in activity ----------
-# Visible only to Weng. Counts successful agent and team lead sign-ins from
-# the login_events log ("View as team lead" isn't tracked).
-if auth.current_reviewer() == "Weng Yee":
+# Visible only to Weng and Kristine (SIGN_IN_ACTIVITY_REVIEWERS). Counts
+# successful agent, team lead and reviewer sign-ins from the login_events log
+# ("View as team lead" isn't tracked).
+if auth.current_reviewer() in SIGN_IN_ACTIVITY_REVIEWERS:
     with st.expander("Sign-in activity"):
         login_events = db.list_login_events()
         st.caption(
