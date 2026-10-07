@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-ROLE_LABELS = {"agent": "Agent", "team_lead": "Team lead"}
+ROLE_LABELS = {"agent": "Agent", "team_lead": "Team lead", "reviewer": "Reviewer"}
 
 
 def _parse(ts) -> datetime | None:
@@ -23,7 +23,7 @@ def _fmt(dt: datetime | None) -> str:
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M") if dt else "Never"
 
 
-def summarize(events: list, agents: list, team_leads: list, is_excluded=lambda name: False) -> pd.DataFrame:
+def summarize(events: list, agents: list, team_leads: list, is_excluded=lambda name: False, reviewers: list | None = None) -> pd.DataFrame:
     """One row per person: role, name, sign-in count, last sign-in (UTC).
 
     Everyone on the current roster appears, including people who have never
@@ -38,6 +38,8 @@ def summarize(events: list, agents: list, team_leads: list, is_excluded=lambda n
     for t in team_leads:
         if t.get("name"):
             people[("team_lead", str(t["id"]))] = t["name"]
+    for name in reviewers or []:
+        people[("reviewer", name)] = name
 
     stats: dict = {}
     for e in events:
