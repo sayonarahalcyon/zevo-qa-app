@@ -472,17 +472,25 @@ def reopen_dispute(dispute_id: str) -> str | None:
 
 # ---------- sign-in activity ----------
 
-def record_login(role: str, person_id: str, person_name: str) -> None:
-    """Logs one successful agent or team lead sign-in. Best-effort and
-    silent: a missing table (migration not run yet) or a database hiccup must
-    never stop someone from signing in, so every failure is swallowed."""
+def record_login(role: str, person_id: str, person_name: str, by_reviewer: str | None = None, kind: str = "sign_in") -> None:
+    """Logs one successful sign-in (or one reviewer "View as team lead").
+    `by_reviewer` names the reviewer who was signed in on that browser session
+    (or who is viewing as the team lead); None means no reviewer was. Best-effort
+    and silent: a missing table (migration not run yet) or a database hiccup
+    must never stop someone from signing in, so every failure is swallowed.
+    If the by_reviewer/kind columns don't exist yet, a plain sign-in is still
+    recorded without them."""
     try:
         db = get_client()
         if not db:
             return
-        db.table("login_events").insert(
-            {"role": role, "person_id": str(person_id), "person_name": person_name}
-        ).execute()
+        row = {"role": role, "person_id": str(person_id), "person_name": person_name}
+        try:
+            db.table("login_events").insert({**row, "by_reviewer": by_reviewer, "kind": kind}).execute()
+        except Exception:
+            if kind != "sign_in":
+                return
+            db.table("login_events").insert(row).execute()
         list_login_events.clear()
     except Exception:
         pass
@@ -502,7 +510,7 @@ def list_login_events() -> list[dict]:
         while True:
             res = (
                 db.table("login_events")
-                .select("role,person_id,person_name,signed_in_at")
+                .select("*")
                 .order("signed_in_at", desc=True)
                 .range(start, start + 999)
                 .execute()

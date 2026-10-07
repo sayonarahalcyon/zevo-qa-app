@@ -51,7 +51,7 @@ def render_sign_in() -> None:
             )
         elif lead and verify_password(pw, lead.get("password_hash")):
             st.session_state[SESSION_KEY] = {"id": lead["id"], "name": lead["name"]}
-            db.record_login("team_lead", lead["id"], lead["name"])
+            db.record_login("team_lead", lead["id"], lead["name"], by_reviewer=st.session_state.get("reviewer_name"))
             st.rerun()
         else:
             st.error("Wrong password.")
