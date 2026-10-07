@@ -15,7 +15,7 @@ learned automatically and grows without a redeploy.
 import bcrypt
 import streamlit as st
 
-from lib import db
+from lib import activity, db
 
 SESSION_KEY = "agent_signed_in"  # {"id": ..., "name": ...}
 
@@ -65,6 +65,7 @@ def render_sign_in() -> None:
         elif agent and verify_password(pw, agent.get("password_hash")):
             st.session_state[SESSION_KEY] = {"id": agent["id"], "name": agent["name"]}
             db.record_login("agent", agent["id"], agent["name"], by_reviewer=st.session_state.get("reviewer_name"))
+            activity.reset()
             st.rerun()
         else:
             st.error("Wrong password.")
@@ -77,6 +78,8 @@ def render_sign_out(container=None) -> None:
         return
     container.success(f"Signed in as {agent['name']}")
     if container.button("Sign out", key="agent_auth_sign_out"):
+        activity.log("sign_out", "", "agent")
+        activity.reset()
         st.session_state.pop(SESSION_KEY, None)
         st.rerun()
 
@@ -104,4 +107,5 @@ def render_change_password() -> None:
                 if err:
                     st.error(f"Could not update password: {err}")
                 else:
+                    activity.log("change_password", "", "agent")
                     st.success("Password updated.")

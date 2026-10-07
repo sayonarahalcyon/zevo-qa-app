@@ -19,7 +19,7 @@ from datetime import date, datetime
 
 import streamlit as st
 
-from lib import auth, db, sheets_backup, weeks
+from lib import activity, auth, db, sheets_backup, weeks
 from lib.constants import DISPUTE_CATEGORIES
 
 
@@ -104,6 +104,11 @@ def render_agent_form(entry: dict, agent: dict, *, submitted_by: str | None = No
                         None,
                     )
                     _mirror_to_backup_sheet(just_saved)
+                    activity.log(
+                        "file_dispute" if request_type == "dispute" else "file_question",
+                        f"{agent['name']}, ticket {entry_id}",
+                        "team_lead" if submitted_by else "agent",
+                    )
                     if submitted_by:
                         st.success(
                             f"Submitted on {agent.get('name', 'the agent')}'s behalf — a reviewer will follow up here."

@@ -472,22 +472,41 @@ def reopen_dispute(dispute_id: str) -> str | None:
 
 # ---------- sign-in activity ----------
 
-def record_login(role: str, person_id: str, person_name: str, by_reviewer: str | None = None, kind: str = "sign_in") -> None:
-    """Logs one successful sign-in (or one reviewer "View as team lead").
-    `by_reviewer` names the reviewer who was signed in on that browser session
-    (or who is viewing as the team lead); None means no reviewer was. Best-effort
-    and silent: a missing table (migration not run yet) or a database hiccup
-    must never stop someone from signing in, so every failure is swallowed.
-    If the by_reviewer/kind columns don't exist yet, a plain sign-in is still
-    recorded without them."""
+def record_login(
+    role: str,
+    person_id: str,
+    person_name: str,
+    by_reviewer: str | None = None,
+    kind: str = "sign_in",
+    detail: str = "",
+) -> None:
+    """Logs one event to login_events: a sign-in, a reviewer's "View as team
+    lead", or something a person did afterward (lib/activity.py: page opened,
+    period changed, dispute filed, ...). `kind` says which; `detail` is the
+    page title, agent name and so on; `by_reviewer` names the reviewer who was
+    signed in on that browser session (or who is viewing as the team lead),
+    None if no reviewer was. Best-effort and silent: a missing table or column
+    (migration not run yet) or a database hiccup must never get in the way of
+    someone using the app. If the newer columns don't exist yet, a plain
+    sign-in is still recorded without them; other events wait for the SQL."""
     try:
         db = get_client()
         if not db:
             return
         row = {"role": role, "person_id": str(person_id), "person_name": person_name}
-        try:
-            db.table("login_events").insert({**row, "by_reviewer": by_reviewer, "kind": kind}).execute()
-        except Exception:
+        tiers = [
+            {**row, "by_reviewer": by_reviewer, "kind": kind, "detail": detail or ""},
+            {**row, "by_reviewer": by_reviewer, "kind": kind},
+        ]
+        done = False
+        for attempt in tiers:
+            try:
+                db.table("login_events").insert(attempt).execute()
+                done = True
+                break
+            except Exception:
+                continue
+        if not done:
             if kind != "sign_in":
                 return
             db.table("login_events").insert(row).execute()

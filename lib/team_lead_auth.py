@@ -15,7 +15,7 @@ without a redeploy.
 
 import streamlit as st
 
-from lib import db
+from lib import activity, db
 from lib.agent_auth import hash_password, verify_password
 
 SESSION_KEY = "team_lead_signed_in"  # {"id": ..., "name": ...}
@@ -52,6 +52,7 @@ def render_sign_in() -> None:
         elif lead and verify_password(pw, lead.get("password_hash")):
             st.session_state[SESSION_KEY] = {"id": lead["id"], "name": lead["name"]}
             db.record_login("team_lead", lead["id"], lead["name"], by_reviewer=st.session_state.get("reviewer_name"))
+            activity.reset()
             st.rerun()
         else:
             st.error("Wrong password.")
@@ -64,6 +65,8 @@ def render_sign_out(container=None) -> None:
         return
     container.success(f"Signed in as {lead['name']}")
     if container.button("Sign out", key="tl_auth_sign_out"):
+        activity.log("sign_out", "", "team_lead")
+        activity.reset()
         st.session_state.pop(SESSION_KEY, None)
         st.rerun()
 
@@ -91,4 +94,5 @@ def render_change_password() -> None:
                 if err:
                     st.error(f"Could not update password: {err}")
                 else:
+                    activity.log("change_password", "", "team_lead")
                     st.success("Password updated.")

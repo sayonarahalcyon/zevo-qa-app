@@ -16,7 +16,7 @@ Required secret shape:
 
 import streamlit as st
 
-from lib import db
+from lib import activity, db
 from lib.constants import REVIEWER_NAMES
 
 SESSION_KEY = "reviewer_name"
@@ -50,6 +50,8 @@ def render_auth(container) -> None:
     if signed_in:
         container.success(f"Signed in as {signed_in}")
         if container.button("Sign out", use_container_width=True, key="auth_sign_out"):
+            activity.log("sign_out", "", None)
+            activity.reset()
             st.session_state.pop(SESSION_KEY, None)
             st.rerun()
         return
@@ -61,6 +63,7 @@ def render_auth(container) -> None:
             if _check_password(name, pw):
                 st.session_state[SESSION_KEY] = name
                 db.record_login("reviewer", name, name)
+                activity.reset()
                 # Reviewers sign in to pull and score tickets, and that tool
                 # lives on Weekly QA Batch (not wherever they happened to sign
                 # in from) — send them straight there instead of just rerunning.

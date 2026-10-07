@@ -33,7 +33,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from lib import db, disputes, period_picker, weeks
+from lib import activity, db, disputes, period_picker, weeks
 from lib.constants import CRITICAL_ERRORS, RUBRIC
 from lib.intercom_client import conversation_url
 from lib.ui import result_badge_md
@@ -74,6 +74,10 @@ def render(
     # limited to the chosen window; the weekly-quota tile is the one exception
     # (always the current calendar week).
     period = period_picker.pick(entries, key_prefix=period_key)
+    activity.changed(
+        period_key, period.label, "change_period", f"{agent['name']}: {period.label}",
+        "team_lead" if submitted_by else "agent",
+    )
     entries = period.filter(entries)
     real_entries = [e for e in entries if not e.get("is_test")]
     test_count = len(entries) - len(real_entries)
