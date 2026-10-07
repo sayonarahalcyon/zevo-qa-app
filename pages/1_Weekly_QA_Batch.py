@@ -12,12 +12,13 @@ from datetime import date, timedelta
 import streamlit as st
 import streamlit.components.v1 as components
 
-from lib import auth, db, sampling, ui, weeks
+from lib import activity, auth, db, sampling, ui, weeks
 from lib.intercom_client import IntercomError, conversation_url, get_conversation, search_conversations
 from lib.ticket_view import render_ticket
 
 st.set_page_config(page_title="Weekly QA Batch — ZEVO Quality Evaluation", page_icon=ui.LOGO_URL, layout="wide")
 ui.inject_style()
+activity.page_view("Weekly QA Batch")
 
 # ---------- reset unsaved ticket-selection state on a real browser reload ----------
 # Streamlit keeps the same session_state across a hard refresh, so filters,

@@ -11,10 +11,11 @@ from datetime import date
 
 import streamlit as st
 
-from lib import auth, db, ui, weeks
+from lib import activity, auth, db, ui, weeks
 
 st.set_page_config(page_title="ZEVO Quality Evaluation", page_icon=ui.LOGO_URL, layout="wide")
 ui.inject_style()
+activity.page_view("Home")
 
 # ---------- hero ----------
 ui.page_heading("ZEVO Quality Evaluation")

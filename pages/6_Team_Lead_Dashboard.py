@@ -13,7 +13,7 @@ from datetime import date
 
 import streamlit as st
 
-from lib import agent_dashboard, auth, db, period_picker, team_lead_auth, ui, weeks
+from lib import activity, agent_dashboard, auth, db, period_picker, team_lead_auth, ui, weeks
 from lib.constants import VIEW_AS_TEAM_LEAD_REVIEWERS
 
 st.set_page_config(page_title="Team Lead Dashboard — ZEVO Quality Evaluation", page_icon=ui.LOGO_URL, layout="wide")
@@ -69,6 +69,9 @@ if auth.current_reviewer() in VIEW_AS_TEAM_LEAD_REVIEWERS:
     viewing_as = next((t for t in leads if t.get("name") == picked), None)
 else:
     ss.pop("tl_view_as_name", None)
+
+activity.set_view_as(viewing_as)
+activity.page_view("Team Lead Dashboard", role="team_lead")
 
 if viewing_as:
     lead = {"id": viewing_as["id"], "name": viewing_as["name"]}
@@ -144,6 +147,7 @@ today = date.today()
 # comparison, and the per-agent Audits/Avg Score/Status columns) is computed
 # from the entries inside the chosen window. "To date" is the old all-time view.
 period = period_picker.pick(metric_entries, key_prefix="tl_period")
+activity.changed("tl_period", period.label, "change_period", f"Team rollup: {period.label}", "team_lead")
 period_phrase = period.phrase
 period_entries = period.filter(metric_entries)
 
@@ -265,6 +269,7 @@ for a in my_agents:
     r5.write(f"{week_count} / 3")
     if r6.button("View", key=f"tl_view_agent_{a['id']}", use_container_width=True):
         ss["tl_open_agent_id"] = a["id"]
+        activity.log("open_agent", a["name"], "team_lead")
         st.rerun()
 
 if not viewing_as:

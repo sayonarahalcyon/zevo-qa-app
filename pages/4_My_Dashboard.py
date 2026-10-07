@@ -13,10 +13,11 @@ agent's own sign-in, sign-out, and "change my password" controls around it.
 
 import streamlit as st
 
-from lib import agent_auth, agent_dashboard, ui
+from lib import activity, agent_auth, agent_dashboard, ui
 
 st.set_page_config(page_title="My Dashboard — ZEVO Quality Evaluation", page_icon=ui.LOGO_URL, layout="wide")
 ui.inject_style()
+activity.page_view("My Dashboard", role="agent")
 
 # This page is meant to be opened through app.py (which decides what the sidebar
 # shows). On the rare cold start where Streamlit runs this file directly from its

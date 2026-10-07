@@ -9,10 +9,11 @@ reviewer work — same gate as QA Log (lib.auth).
 
 import streamlit as st
 
-from lib import auth, disputes, ui
+from lib import activity, auth, disputes, ui
 
 st.set_page_config(page_title="Questions & Disputes — ZEVO Quality Evaluation", page_icon=ui.LOGO_URL, layout="wide")
 ui.inject_style()
+activity.page_view("Questions & Disputes")
 
 if not auth.is_signed_in():
     st.title("Questions & Disputes")

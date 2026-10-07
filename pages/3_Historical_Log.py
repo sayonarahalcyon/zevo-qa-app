@@ -9,12 +9,13 @@ skews current metrics. New audits are logged in the QA Log page, not here.
 import pandas as pd
 import streamlit as st
 
-from lib import auth, db, ui
+from lib import activity, auth, db, ui
 from lib.constants import RUBRIC
 from lib.ui import result_badge_md
 
 st.set_page_config(page_title="Historical Log — ZEVO Quality Evaluation", page_icon="🗄️", layout="wide")
 ui.inject_style()
+activity.page_view("Historical Log")
 
 if not auth.is_signed_in():
     st.title("Historical Log")

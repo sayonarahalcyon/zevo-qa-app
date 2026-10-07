@@ -5,11 +5,10 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
-from lib import agent_auth, auth, db, login_activity, sheets_backup, team_lead_auth, ui, weeks
+from lib import activity, agent_auth, auth, db, sheets_backup, signin_panel, team_lead_auth, ui, weeks
 from lib.constants import (
     CHANNEL_OPTIONS,
     CRITICAL_ERRORS,
-    REVIEWER_NAMES,
     RUBRIC,
     RUBRIC_GUIDE,
     SIGN_IN_ACTIVITY_REVIEWERS,
@@ -21,6 +20,7 @@ from lib.ui import result_badge_md
 
 st.set_page_config(page_title="QA Log — ZEVO Quality Evaluation", page_icon=ui.LOGO_URL, layout="wide")
 ui.inject_style()
+activity.page_view("QA Log")
 
 if not auth.is_signed_in():
     st.title("QA Log")
@@ -487,39 +487,12 @@ if auth.current_reviewer() == "Weng Yee":
             st.rerun()
 
 # ---------- sign-in activity ----------
-# Visible only to Weng and Kristine (SIGN_IN_ACTIVITY_REVIEWERS). Counts
-# successful agent, team lead and reviewer sign-ins from the login_events log,
-# split into the person themselves vs. a reviewer signed in as/viewing as them.
+# Visible only to Weng and Kristine (SIGN_IN_ACTIVITY_REVIEWERS). Who signed in
+# (agents, team leads, reviewers), how often, when, and what they did, for a
+# chosen day, week, month or range. The work lives in lib/signin_panel.py.
 if auth.current_reviewer() in SIGN_IN_ACTIVITY_REVIEWERS:
     with st.expander("Sign-in activity"):
-        login_events = db.list_login_events()
-        st.caption(
-            "How many times each agent, team lead and reviewer has signed in, and when they last did. "
-            "Counting started the day the sign-in log was set up (for reviewers, the day reviewer "
-            "tracking was added); earlier sign-ins were never recorded. Times are UTC. "
-            "\"Sign-ins\" counts a person signing in themselves (no reviewer was signed in on that "
-            "browser session). \"Reviewer access\" counts a password sign-in made while a reviewer was "
-            "signed in, and a reviewer's View as team lead. A password can't prove who typed it, so a "
-            "reviewer signing in as someone from a separate or private window looks like the person."
-        )
-        if not login_events:
-            st.info(
-                "No sign-ins recorded yet. If the login_events table hasn't been created in "
-                "Supabase, run sql/migrations/2026_10_06_add_login_events.sql first."
-            )
-        role_filter = st.radio("Show", ["Everyone", "Team leads", "Agents", "Reviewers"], horizontal=True, key="login_activity_role")
-        summary = login_activity.summarize(
-            login_events, agents, db.list_team_leads(), is_excluded=is_excluded_agent_name, reviewers=REVIEWER_NAMES
-        )
-        if role_filter == "Team leads":
-            summary = summary[summary["Role"] == "Team lead"]
-        elif role_filter == "Agents":
-            summary = summary[summary["Role"] == "Agent"]
-        elif role_filter == "Reviewers":
-            summary = summary[summary["Role"] == "Reviewer"]
-        st.dataframe(summary, use_container_width=True, hide_index=True)
-        st.markdown("**Most recent sign-ins**")
-        st.dataframe(login_activity.recent(login_events), use_container_width=True, hide_index=True)
+        signin_panel.render(agents, db.list_team_leads())
 
 # ---------- delete a QA entry ----------
 # Visible only to Weng — same reasoning as the two sections above. Deleting
