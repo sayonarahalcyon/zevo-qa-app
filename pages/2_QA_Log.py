@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from lib import agent_auth, auth, db, login_activity, sheets_backup, team_lead_auth, ui, weeks
-from lib.constants import CHANNEL_OPTIONS, CRITICAL_ERRORS, RUBRIC, RUBRIC_GUIDE, is_excluded_agent_name
+from lib.constants import CHANNEL_OPTIONS, CRITICAL_ERRORS, REVIEWER_NAMES, RUBRIC, RUBRIC_GUIDE, is_excluded_agent_name
 from lib.intercom_client import IntercomError, conversation_url, get_conversation, list_admins
 from lib.ticket_view import render_ticket
 from lib.ui import result_badge_md
@@ -480,28 +480,30 @@ if auth.current_reviewer() == "Weng Yee":
 
 # ---------- sign-in activity ----------
 # Visible only to Weng. Counts successful agent and team lead sign-ins from
-# the login_events log (reviewers and "View as team lead" aren't tracked).
+# the login_events log ("View as team lead" isn't tracked).
 if auth.current_reviewer() == "Weng Yee":
     with st.expander("Sign-in activity"):
         login_events = db.list_login_events()
         st.caption(
-            "How many times each agent and team lead has signed in, and when they last did. "
-            "Counting started the day the sign-in log was set up; earlier sign-ins were never "
-            "recorded. Times are UTC."
+            "How many times each agent, team lead and reviewer has signed in, and when they last did. "
+            "Counting started the day the sign-in log was set up (for reviewers, the day reviewer "
+            "tracking was added); earlier sign-ins were never recorded. Times are UTC."
         )
         if not login_events:
             st.info(
                 "No sign-ins recorded yet. If the login_events table hasn't been created in "
                 "Supabase, run sql/migrations/2026_10_06_add_login_events.sql first."
             )
-        role_filter = st.radio("Show", ["Everyone", "Team leads", "Agents"], horizontal=True, key="login_activity_role")
+        role_filter = st.radio("Show", ["Everyone", "Team leads", "Agents", "Reviewers"], horizontal=True, key="login_activity_role")
         summary = login_activity.summarize(
-            login_events, agents, db.list_team_leads(), is_excluded=is_excluded_agent_name
+            login_events, agents, db.list_team_leads(), is_excluded=is_excluded_agent_name, reviewers=REVIEWER_NAMES
         )
         if role_filter == "Team leads":
             summary = summary[summary["Role"] == "Team lead"]
         elif role_filter == "Agents":
             summary = summary[summary["Role"] == "Agent"]
+        elif role_filter == "Reviewers":
+            summary = summary[summary["Role"] == "Reviewer"]
         st.dataframe(summary, use_container_width=True, hide_index=True)
         st.markdown("**Most recent sign-ins**")
         st.dataframe(login_activity.recent(login_events), use_container_width=True, hide_index=True)
