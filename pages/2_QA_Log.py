@@ -488,15 +488,19 @@ if auth.current_reviewer() == "Weng Yee":
 
 # ---------- sign-in activity ----------
 # Visible only to Weng and Kristine (SIGN_IN_ACTIVITY_REVIEWERS). Counts
-# successful agent, team lead and reviewer sign-ins from the login_events log
-# ("View as team lead" isn't tracked).
+# successful agent, team lead and reviewer sign-ins from the login_events log,
+# split into the person themselves vs. a reviewer signed in as/viewing as them.
 if auth.current_reviewer() in SIGN_IN_ACTIVITY_REVIEWERS:
     with st.expander("Sign-in activity"):
         login_events = db.list_login_events()
         st.caption(
             "How many times each agent, team lead and reviewer has signed in, and when they last did. "
             "Counting started the day the sign-in log was set up (for reviewers, the day reviewer "
-            "tracking was added); earlier sign-ins were never recorded. Times are UTC."
+            "tracking was added); earlier sign-ins were never recorded. Times are UTC. "
+            "\"Sign-ins\" counts a person signing in themselves (no reviewer was signed in on that "
+            "browser session). \"Reviewer access\" counts a password sign-in made while a reviewer was "
+            "signed in, and a reviewer's View as team lead. A password can't prove who typed it, so a "
+            "reviewer signing in as someone from a separate or private window looks like the person."
         )
         if not login_events:
             st.info(

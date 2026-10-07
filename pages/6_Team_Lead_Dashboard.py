@@ -47,6 +47,12 @@ if auth.current_reviewer() in VIEW_AS_TEAM_LEAD_REVIEWERS:
 
     def _switched_team_lead() -> None:
         ss["tl_open_agent_id"] = None  # a different team lead's agent list: start from their rollup
+        # Recorded once per pick (not on every rerun) so Weng's Sign-in activity can
+        # show a reviewer looking at a team lead's dashboard, apart from the team
+        # lead signing in themselves.
+        chosen = next((t for t in leads if t.get("name") == ss.get("tl_view_as_name")), None)
+        if chosen:
+            db.record_login("team_lead", chosen["id"], chosen["name"], by_reviewer=auth.current_reviewer(), kind="view_as")
 
     with st.container(border=True):
         st.markdown("**View as team lead**")
