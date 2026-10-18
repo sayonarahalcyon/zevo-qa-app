@@ -656,19 +656,28 @@ if filtered:
     # in the leftmost column is clicked, not when clicking the row's text —
     # confusing since nothing here looks like a checkbox column. A plain
     # button per row is unambiguous and always clickable.
-    row_widths = [1, 1.6, 1.3, 1.3, 0.7, 0.6, 1, 1.1, 0.5, 0.6, 0.7, 0.8]
-    h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12 = st.columns(row_widths)
+    row_widths = [1, 1.5, 1.3, 1.2, 0.7, 0.6, 1, 1.1, 0.5, 0.6, 0.7, 0.7, 0.8]
+    h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13 = st.columns(row_widths)
     for h, label in zip(
-        (h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11),
-        ("Date", "Agent", "Ticket", "Concern", "Channel", "Total", "Result", "Reviewer", "Test", "Escalated", "Disputed"),
+        (h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12),
+        (
+            "Date", "Agent", "Ticket", "Concern", "Channel", "Total", "Result", "Reviewer",
+            "Test", "Escalated", "Disputed", "Sign off",
+        ),
     ):
         h.markdown(f"**{label}**")
+
+    # A check mark once the agent has signed off; blank while it is still waiting
+    # (or was edited since they signed), and for evaluations that never needed one.
+    # If the sign-off table isn't there yet (SQL not run) the column stays blank.
+    signoffs_now = db.list_signoffs()
+    signoff_lookup = signoff.by_entry(signoffs_now) if signoffs_now is not None else {}
 
     shown = filtered[:300]
     for e in shown:
         ticket_id = e.get("ticket_id") or ""
         ticket_url = e.get("ticket_link") or (conversation_url(ticket_id) if ticket_id else "")
-        c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12 = st.columns(row_widths)
+        c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13 = st.columns(row_widths)
         c1.write(e.get("qa_date", "") or "—")
         c2.write(e.get("agent_name", "") or "—")
         c3.markdown(f"[{ticket_id}]({ticket_url})" if ticket_url else (ticket_id or "—"))
@@ -680,7 +689,8 @@ if filtered:
         c9.write("🧪" if e.get("is_test") else "")
         c10.write("🚩" if e.get("is_escalated") else "")
         c11.write("⚖️" if any((h.get("reason") or "") == "Dispute" for h in (e.get("edit_log") or [])) else "")
-        if c12.button("View", key=f"view_audit_{_entry_key(e)}", use_container_width=True):
+        c12.write("✅" if signoff.state(e, signoff_lookup.get(e.get("id"))) == signoff.SIGNED else "")
+        if c13.button("View", key=f"view_audit_{_entry_key(e)}", use_container_width=True):
             ss["log_open_audit_key"] = _entry_key(e)
             st.rerun()
 
