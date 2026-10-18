@@ -73,6 +73,7 @@ if viewing_as:
         {"id": viewing_as["id"], "name": viewing_as["name"]},
         show_dispute_form=False,
         period_key="agent_view_as",
+        preview_sign_off=True,
     )
     st.stop()
 
