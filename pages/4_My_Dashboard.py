@@ -46,7 +46,7 @@ with top_l:
 with top_r:
     agent_auth.render_sign_out()
 
-agent_dashboard.render(agent)
+agent_dashboard.render(agent, can_sign_off=True)
 
 st.divider()
 agent_auth.render_change_password()

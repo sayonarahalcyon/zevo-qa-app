@@ -5,7 +5,7 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
-from lib import activity, agent_auth, auth, db, sheets_backup, signin_panel, team_lead_auth, ui, weeks
+from lib import activity, agent_auth, auth, db, sheets_backup, signin_panel, signoff, team_lead_auth, ui, weeks
 from lib.constants import (
     CHANNEL_OPTIONS,
     CRITICAL_ERRORS,
@@ -485,6 +485,13 @@ if auth.current_reviewer() == "Weng Yee":
                     f"Resynced {n_disputes} dispute(s) and {n_questions} question(s) to the backup sheet.",
                 )
             st.rerun()
+
+# ---------- agent sign-off ----------
+# Visible to every signed-in reviewer: which evaluations are still waiting for
+# the agent to read and sign off, and how long they have waited. The prompt the
+# agent sees lives on My Dashboard; the logic is in lib/signoff.py.
+with st.expander("Agent sign-off"):
+    signoff.render_reviewer_panel()
 
 # ---------- sign-in activity ----------
 # Visible only to Weng and Kristine (SIGN_IN_ACTIVITY_REVIEWERS). Who signed in

@@ -13,7 +13,7 @@ from datetime import date
 
 import streamlit as st
 
-from lib import activity, agent_dashboard, auth, db, period_picker, team_lead_auth, ui, weeks
+from lib import activity, agent_dashboard, auth, db, period_picker, signoff, team_lead_auth, ui, weeks
 from lib.constants import VIEW_AS_TEAM_LEAD_REVIEWERS
 
 st.set_page_config(page_title="Team Lead Dashboard — ZEVO Quality Evaluation", page_icon=ui.LOGO_URL, layout="wide")
@@ -271,6 +271,20 @@ for a in my_agents:
         ss["tl_open_agent_id"] = a["id"]
         activity.log("open_agent", a["name"], "team_lead")
         st.rerun()
+
+# ---------- agent sign-off ----------
+# Which of this team's evaluations are still waiting for the agent to read and
+# sign off, and recent sign-offs. Read-only; the agent signs on My Dashboard.
+st.divider()
+st.subheader(
+    "Agent sign-off",
+    help=(
+        "Every evaluation logged for your agents asks the agent to read it and sign off on My Dashboard. "
+        "This shows what is still waiting and for how long. Evaluations logged before sign-off was switched "
+        "on are not counted, and test audits never need one."
+    ),
+)
+signoff.render_team_panel(my_agents)
 
 if not viewing_as:
     st.divider()
