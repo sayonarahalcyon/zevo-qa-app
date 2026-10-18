@@ -246,11 +246,19 @@ st.divider()
 # ---------- per-agent rollup ----------
 st.subheader("Your team")
 st.caption("Click View to open an agent's own My Dashboard view — scores, trend, and category breakdown.")
+st.caption(
+    "Sign off is how many of an agent's evaluations they have signed off on, out of the ones that ask for it "
+    "(for example 2 / 3 means one is still waiting). It counts all of their evaluations, whatever period is "
+    "picked above. A dash means none need one yet."
+)
 
-row_widths = [2, 1, 1, 1, 1.3, 1]
-h1, h2, h3, h4, h5, h6 = st.columns(row_widths)
-for h, label in zip((h1, h2, h3, h4, h5), ("Agent", "Audits", "Avg Score", "Status", "This week (of 3)")):
+row_widths = [2, 1, 1, 1, 1.3, 1.1, 1]
+h1, h2, h3, h4, h5, h6, h7 = st.columns(row_widths)
+for h, label in zip((h1, h2, h3, h4, h5, h6), ("Agent", "Audits", "Avg Score", "Status", "This week (of 3)", "Sign off")):
     h.markdown(f"**{label}**")
+# Signed off / needing sign-off, per agent, over all their evaluations whatever period is
+# picked above (like the weekly quota). "—" when nothing needs one or sign-off isn't on yet.
+signoffs_now = db.list_signoffs()
 
 for a in my_agents:
     # Audits / Avg Score / Status follow the period picked above; the weekly
@@ -261,13 +269,18 @@ for a in my_agents:
     week_count = sum(1 for e in _entries_for(a, metric_entries) if weeks.in_week(e.get("qa_date"), today))
     status = ("🟢 Pass" if (avg or 0) >= 85 else "🔴 Fail") if avg is not None else "—"
 
-    r1, r2, r3, r4, r5, r6 = st.columns(row_widths)
+    r1, r2, r3, r4, r5, r6, r7 = st.columns(row_widths)
     r1.write(a["name"])
     r2.write(len(mine))
     r3.write(avg if avg is not None else "—")
     r4.write(status)
     r5.write(f"{week_count} / 3")
-    if r6.button("View", key=f"tl_view_agent_{a['id']}", use_container_width=True):
+    if signoffs_now is None:
+        r6.write("—")
+    else:
+        signed_n, required_n = signoff.counts(_entries_for(a, metric_entries), signoffs_now)
+        r6.write(f"{signed_n} / {required_n}" if required_n else "—")
+    if r7.button("View", key=f"tl_view_agent_{a['id']}", use_container_width=True):
         ss["tl_open_agent_id"] = a["id"]
         activity.log("open_agent", a["name"], "team_lead")
         st.rerun()
