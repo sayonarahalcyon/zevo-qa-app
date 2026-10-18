@@ -18,7 +18,7 @@ from lib import db
 
 ACTION_LABELS = {
     "sign_in": "Signed in",
-    "view_as": "Viewed as team lead",
+    "view_as": "Viewed as team lead or agent",
     "page_view": "Opened a page",
     "open_agent": "Opened an agent",
     "change_period": "Changed the period",
@@ -45,6 +45,17 @@ def set_view_as(lead: dict | None) -> None:
         ss.pop("_activity_view_as", None)
 
 
+def set_view_as_agent(agent: dict | None) -> None:
+    """Same as set_view_as, for My Dashboard: while a reviewer is viewing as an
+    agent, what they do is recorded under that agent and marked as the
+    reviewer's, never as the agent's own."""
+    ss = st.session_state
+    if agent and ss.get("reviewer_name"):
+        ss["_activity_view_as_agent"] = (agent["id"], agent["name"])
+    else:
+        ss.pop("_activity_view_as_agent", None)
+
+
 def reset() -> None:
     """Forget the "already logged" bookkeeping, so the next page a person
     opens after signing in or out is recorded."""
@@ -68,6 +79,9 @@ def _identity(role: str | None):
             return "team_lead", lead["id"], lead["name"], reviewer or None
         return None
     if role == "agent":
+        view_as = ss.get("_activity_view_as_agent")
+        if view_as and reviewer:
+            return "agent", view_as[0], view_as[1], reviewer
         agent = ss.get("agent_signed_in")
         if agent:
             return "agent", agent["id"], agent["name"], reviewer or None

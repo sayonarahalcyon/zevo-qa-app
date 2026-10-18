@@ -128,7 +128,7 @@ def render(agents: list, team_leads: list) -> None:
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Sign-ins", t["sign_ins"], help="Times someone signed in themselves (no reviewer signed in on that browser session).")
     m2.metric("People who signed in", t["people"], help="Different people with at least one sign-in of their own.")
-    m3.metric("Reviewer access", t["reviewer_access"], help="Sign-ins made while a reviewer was signed in, plus View as team lead picks.")
+    m3.metric("Reviewer access", t["reviewer_access"], help="Sign-ins made while a reviewer was signed in, plus View as team lead or agent picks.")
     m4.metric("Actions", t["actions"], help="Pages opened, agents opened, period changes, questions and disputes filed, password changes and sign-outs, by the people themselves.")
 
     per_day = login_activity.per_day(events, start, end, tz_name)

@@ -16,6 +16,8 @@ REVIEWER_NAMES = ["Erwin Bagnol", "Weng Yee", "Kristine Lariosa"]
 # Reviewers who can open the Team Lead Dashboard "as" any team lead (read-only,
 # no password needed). Not every reviewer: Erwin is deliberately left out.
 VIEW_AS_TEAM_LEAD_REVIEWERS = ["Weng Yee", "Kristine Lariosa"]
+# Who gets "View as agent" on My Dashboard: the same two reviewers, read-only.
+VIEW_AS_AGENT_REVIEWERS = ["Weng Yee", "Kristine Lariosa"]
 
 # Reviewers who can open QA Log's "Sign-in activity" panel (how many times, and
 # when most recently, each agent, team lead and reviewer signed in). Erwin is
