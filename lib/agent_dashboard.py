@@ -25,6 +25,12 @@ on the agent's behalf (2026-10-03) — the submission is still recorded
 against the agent (same agent_id/agent_name as always), with submitted_by
 noting who actually filed it, visible to both the agent on My Dashboard and
 the reviewer in the Questions & Disputes inbox.
+
+can_sign_off (2026-10-18) is True only on My Dashboard. It puts a "Needs your
+sign-off" section above the period picker (every evaluation still waiting on
+the agent, whatever period is picked) with the sign-off form on each. Anywhere
+else (team lead drill-down, View as team lead) the same sign-off state is shown
+read-only as a line under each evaluation. See lib/signoff.py.
 """
 
 from datetime import date
@@ -33,7 +39,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from lib import activity, db, disputes, period_picker, weeks
+from lib import activity, db, disputes, period_picker, signoff, weeks
 from lib.constants import CRITICAL_ERRORS, RUBRIC
 from lib.intercom_client import conversation_url
 from lib.ui import result_badge_md
@@ -53,6 +59,7 @@ def render(
     show_dispute_form: bool = True,
     submitted_by: str | None = None,
     period_key: str = "agent_dash",
+    can_sign_off: bool = False,
 ) -> None:
     entries = [
         e
@@ -67,6 +74,14 @@ def render(
     if not all_real_entries:
         st.info("No QA evaluations on file yet.")
         return
+
+    # ---------- agent sign-off ----------
+    # None means the evaluation_signoffs table isn't there yet (SQL not run),
+    # in which case nothing about sign-off is shown at all.
+    signoffs = db.list_signoffs()
+    signoff_lookup = signoff.by_entry(signoffs) if signoffs is not None else None
+    if signoffs is not None and can_sign_off:
+        _render_pending_signoffs(all_real_entries, signoffs, agent)
 
     # ---------- period picker ----------
     # Weekly / Monthly / To date (lib/period_picker). Everything below — the
@@ -262,51 +277,101 @@ def render(
         st.caption("No evaluations in this period.")
 
     for e in sorted_entries:
-        ticket_id = e.get("ticket_id") or ""
-        ticket_url = e.get("ticket_link") or (conversation_url(ticket_id) if ticket_id else "")
         label = (
             f"{e.get('qa_date') or '—'} · {e.get('result') or '—'} · {e.get('total_score', '—')}/100"
             + (" · 🧪 TEST" if e.get("is_test") else "")
         )
+        so = signoff_lookup.get(e.get("id")) if signoff_lookup is not None else None
+        so_state = signoff.state(e, so) if signoff_lookup is not None else signoff.NOT_REQUIRED
+        label += signoff.label_suffix(so_state)
         with st.expander(label):
-            h1, h2, h3 = st.columns([2, 2, 3])
-            h1.markdown(result_badge_md(e.get("result", "")), unsafe_allow_html=True)
-            h2.markdown(f"**{e.get('total_score', '—')} / 100**")
-            h3.caption(f"Reviewed by {e.get('qa_reviewer') or '—'} on {e.get('qa_date') or '—'}")
-
-            if ticket_url:
-                st.markdown(f"**Ticket:** [{ticket_id}]({ticket_url})")
-            st.markdown(
-                f"**Renter/Host:** {e.get('renter_host') or '—'} &nbsp;·&nbsp; "
-                f"**Concern type:** {', '.join(e.get('concern_types') or []) or '—'}"
-            )
-
-            scores = e.get("scores") or {}
-            remarks = e.get("remarks") or {}
-            breakdown_rows = [
-                {
-                    "Category": r["name"],
-                    "Score": scores.get(r["key"], "—"),
-                    "Max": r["max"],
-                    "Remarks": remarks.get(r["key"]) or "",
-                }
-                for r in RUBRIC
-            ]
-            st.dataframe(pd.DataFrame(breakdown_rows), use_container_width=True, hide_index=True)
-
-            crit = e.get("critical_errors") or {}
-            flagged = [c["label"] for c in CRITICAL_ERRORS if crit.get(c["key"])]
-            if flagged:
-                for lbl in flagged:
-                    st.error(f"🚫 {lbl}")
-
-            if e.get("overall_comments"):
-                st.markdown("**Overall comments**")
-                st.write(e["overall_comments"])
-
-            if e.get("is_escalated"):
-                st.caption("🚩 Escalated")
+            if can_sign_off and so_state in (signoff.PENDING, signoff.RESIGN):
+                # Its details, sign-off form and dispute form are in the section at the top of the
+                # page; repeating them here would duplicate widget keys.
+                signoff.status_caption(e, so, as_agent=True)
+                continue
+            _render_entry_details(e)
+            if signoff_lookup is not None:
+                signoff.status_caption(e, so, as_agent=can_sign_off)
 
             if not e.get("is_test") and show_dispute_form:
                 st.divider()
                 disputes.render_agent_form(e, agent, submitted_by=submitted_by)
+
+
+def _render_pending_signoffs(entries: list[dict], signoffs: list[dict], agent: dict) -> None:
+    """The "Needs your sign-off" section at the top of My Dashboard: every
+    evaluation still waiting on this agent, regardless of the period picked
+    below, each with its full details, the sign-off form and the dispute form."""
+    waiting = signoff.pending(entries, signoffs)
+    if not waiting:
+        return
+    lookup = signoff.by_entry(signoffs)
+    n = len(waiting)
+    st.subheader(f"🔔 Needs your sign-off ({n})")
+    st.caption(
+        f"{'This evaluation was' if n == 1 else f'These {n} evaluations were'} logged by a reviewer and "
+        "waiting for you. Open it, read it, then sign off. Signing off means you have read it. It does not "
+        "mean you agree."
+    )
+    for i, e in enumerate(waiting[: signoff.MAX_SHOWN]):
+        so = lookup.get(e.get("id"))
+        resign = signoff.state(e, so) == signoff.RESIGN
+        label = (
+            f"🔔 {e.get('qa_date') or '—'} · {e.get('result') or '—'} · {e.get('total_score', '—')}/100"
+            f" · reviewed by {e.get('qa_reviewer') or '—'}" + (" · edited, please review again" if resign else "")
+        )
+        with st.expander(label, expanded=(i == 0)):
+            if resign:
+                signoff.status_caption(e, so, as_agent=True)
+            _render_entry_details(e)
+            st.divider()
+            signoff.render_form(e, agent)
+            st.divider()
+            disputes.render_agent_form(e, agent)
+    if n > signoff.MAX_SHOWN:
+        st.caption(f"{n - signoff.MAX_SHOWN} more will appear here once you sign off on these.")
+    st.divider()
+
+
+def _render_entry_details(e: dict) -> None:
+    """Score, ticket, category breakdown, critical errors and comments for one
+    evaluation. Shared by the All evaluations list and the sign-off section."""
+    ticket_id = e.get("ticket_id") or ""
+    ticket_url = e.get("ticket_link") or (conversation_url(ticket_id) if ticket_id else "")
+    h1, h2, h3 = st.columns([2, 2, 3])
+    h1.markdown(result_badge_md(e.get("result", "")), unsafe_allow_html=True)
+    h2.markdown(f"**{e.get('total_score', '—')} / 100**")
+    h3.caption(f"Reviewed by {e.get('qa_reviewer') or '—'} on {e.get('qa_date') or '—'}")
+
+    if ticket_url:
+        st.markdown(f"**Ticket:** [{ticket_id}]({ticket_url})")
+    st.markdown(
+        f"**Renter/Host:** {e.get('renter_host') or '—'} &nbsp;·&nbsp; "
+        f"**Concern type:** {', '.join(e.get('concern_types') or []) or '—'}"
+    )
+
+    scores = e.get("scores") or {}
+    remarks = e.get("remarks") or {}
+    breakdown_rows = [
+        {
+            "Category": r["name"],
+            "Score": scores.get(r["key"], "—"),
+            "Max": r["max"],
+            "Remarks": remarks.get(r["key"]) or "",
+        }
+        for r in RUBRIC
+    ]
+    st.dataframe(pd.DataFrame(breakdown_rows), use_container_width=True, hide_index=True)
+
+    crit = e.get("critical_errors") or {}
+    flagged = [c["label"] for c in CRITICAL_ERRORS if crit.get(c["key"])]
+    for lbl in flagged:
+        st.error(f"🚫 {lbl}")
+
+    if e.get("overall_comments"):
+        st.markdown("**Overall comments**")
+        st.write(e["overall_comments"])
+
+    if e.get("is_escalated"):
+        st.caption("🚩 Escalated")

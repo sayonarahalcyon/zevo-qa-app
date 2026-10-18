@@ -9,6 +9,7 @@ store). Tables mirror the original collections 1:1 — see sql/schema.sql:
   historical_qa_entries    -- one-time read-only import from the retired QA Tracker sheet
   disputes                 -- agent-submitted questions/disputes from My Dashboard (id = uuid4)
   login_events             -- one row per successful agent / team lead sign-in
+  evaluation_signoffs      -- agent sign-off on each evaluation (id = qa_entries.id)
 """
 
 import re
@@ -470,6 +471,49 @@ def reopen_dispute(dispute_id: str) -> str | None:
         return str(e)
 
 
+# ---------- agent sign-off ----------
+
+@st.cache_data(ttl=15, show_spinner=False)
+def list_signoffs() -> list[dict] | None:
+    """All sign-off rows, or None when the table can't be read (most likely the
+    sign-off SQL hasn't been run yet). None, not [], so lib.signoff can tell
+    "feature not switched on" apart from "nobody has signed anything yet" and
+    never flags every evaluation as pending by mistake."""
+    db = get_client()
+    if not db:
+        return None
+    try:
+        res = db.table("evaluation_signoffs").select("*").limit(5000).execute()
+        return res.data or []
+    except Exception:
+        return None
+
+
+def sign_off(entry_id: str, agent_id: str | None, agent_name: str, comment: str = "") -> str | None:
+    """Records (or, after a reviewer edited the evaluation, renews) an agent's
+    sign-off. Returns None on success, or an error message."""
+    db = get_client()
+    if not db:
+        return "Database is not connected. Check the Supabase URL/key in Secrets."
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        db.table("evaluation_signoffs").upsert(
+            {
+                "entry_id": str(entry_id),
+                "agent_id": str(agent_id) if agent_id else None,
+                "agent_name": agent_name,
+                "status": "signed",
+                "signed_at": now,
+                "comment": comment or None,
+                "updated_at": now,
+            }
+        ).execute()
+        list_signoffs.clear()
+        return None
+    except Exception as e:
+        return str(e)
+
+
 # ---------- sign-in activity ----------
 
 def record_login(
@@ -552,3 +596,4 @@ def clear_cache() -> None:
     list_qa_entries.clear()
     list_disputes.clear()
     list_login_events.clear()
+    list_signoffs.clear()

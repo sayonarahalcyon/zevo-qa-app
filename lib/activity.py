@@ -24,6 +24,7 @@ ACTION_LABELS = {
     "change_period": "Changed the period",
     "file_question": "Filed a question",
     "file_dispute": "Filed a dispute",
+    "sign_off": "Signed off on an evaluation",
     "change_password": "Changed password",
     "sign_out": "Signed out",
 }
