@@ -84,6 +84,15 @@ def pending(entries: list[dict], signoffs: list[dict]) -> list[dict]:
     return sorted(rows, key=lambda e: (e.get("qa_date") or "", e.get("updated_at") or ""), reverse=True)
 
 
+def counts(entries: list[dict], signoffs: list[dict]) -> tuple[int, int]:
+    """(signed, required) for these evaluations: required is every one that
+    asks the agent to sign off (waiting, edited since signing, or signed), so
+    grandfathered and test evaluations are left out."""
+    lookup = by_entry(signoffs)
+    states = [state(e, lookup.get(e.get("id"))) for e in entries]
+    return states.count(SIGNED), sum(1 for x in states if x != NOT_REQUIRED)
+
+
 def label_suffix(st_: str) -> str:
     return {
         PENDING: " · 🔔 Awaiting sign-off",
