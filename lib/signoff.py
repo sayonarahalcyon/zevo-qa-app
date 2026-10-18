@@ -128,18 +128,22 @@ def status_caption(entry: dict, signoff: dict | None, *, as_agent: bool) -> None
             st.caption(f"🔔 Waiting for {who} to sign off.")
 
 
-def render_form(entry: dict, agent: dict) -> None:
+def render_form(entry: dict, agent: dict, *, preview: bool = False) -> None:
     """Acknowledge checkbox, optional comment, and the Sign off button for one
-    pending evaluation. Widget keys are namespaced by evaluation id."""
+    pending evaluation. Widget keys are namespaced by evaluation id.
+    preview=True is for a reviewer using View as agent: the same form, drawn
+    disabled, so they can see what the agent sees but cannot sign for them."""
     eid = entry["id"]
     st.markdown("**Sign off**")
+    if preview:
+        st.info("Preview. This is what the agent sees. It is disabled here, so only the agent can sign off.")
     st.caption(
         "Signing off confirms you have read this evaluation. It does not mean you agree with it. "
         "If you disagree or have a question, use the Question or dispute form below instead or as well."
     )
-    ack = st.checkbox("I have read this evaluation.", key=f"signoff_ack_{eid}")
-    comment = st.text_area("Comment for the reviewer (optional)", key=f"signoff_comment_{eid}")
-    if st.button("Sign off", key=f"signoff_btn_{eid}", type="primary"):
+    ack = st.checkbox("I have read this evaluation.", key=f"signoff_ack_{eid}", disabled=preview)
+    comment = st.text_area("Comment for the reviewer (optional)", key=f"signoff_comment_{eid}", disabled=preview)
+    if st.button("Sign off", key=f"signoff_btn_{eid}", type="primary", disabled=preview) and not preview:
         if not ack:
             st.error("Tick the box to confirm you have read it.")
             return

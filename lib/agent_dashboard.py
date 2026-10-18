@@ -31,6 +31,10 @@ sign-off" section above the period picker (every evaluation still waiting on
 the agent, whatever period is picked) with the sign-off form on each. Anywhere
 else (team lead drill-down, View as team lead) the same sign-off state is shown
 read-only as a line under each evaluation. See lib/signoff.py.
+
+preview_sign_off (2026-10-18) is for View as agent: the agent's own layout, with
+the "Needs your sign-off" section and its form drawn disabled so a reviewer can
+see what the agent sees but cannot sign (and no dispute form is shown).
 """
 
 from datetime import date
@@ -60,6 +64,7 @@ def render(
     submitted_by: str | None = None,
     period_key: str = "agent_dash",
     can_sign_off: bool = False,
+    preview_sign_off: bool = False,
 ) -> None:
     entries = [
         e
@@ -80,8 +85,9 @@ def render(
     # in which case nothing about sign-off is shown at all.
     signoffs = db.list_signoffs()
     signoff_lookup = signoff.by_entry(signoffs) if signoffs is not None else None
-    if signoffs is not None and can_sign_off:
-        _render_pending_signoffs(all_real_entries, signoffs, agent)
+    agent_layout = can_sign_off or preview_sign_off  # pending ones are shown at the top, not in the list
+    if signoffs is not None and agent_layout:
+        _render_pending_signoffs(all_real_entries, signoffs, agent, preview=preview_sign_off)
 
     # ---------- period picker ----------
     # Weekly / Monthly / To date (lib/period_picker). Everything below — the
@@ -285,10 +291,10 @@ def render(
         so_state = signoff.state(e, so) if signoff_lookup is not None else signoff.NOT_REQUIRED
         label += signoff.label_suffix(so_state)
         with st.expander(label):
-            if can_sign_off and so_state in (signoff.PENDING, signoff.RESIGN):
+            if agent_layout and so_state in (signoff.PENDING, signoff.RESIGN):
                 # Its details, sign-off form and dispute form are in the section at the top of the
                 # page; repeating them here would duplicate widget keys.
-                signoff.status_caption(e, so, as_agent=True)
+                signoff.status_caption(e, so, as_agent=not preview_sign_off)
                 continue
             _render_entry_details(e)
             if signoff_lookup is not None:
@@ -299,7 +305,9 @@ def render(
                 disputes.render_agent_form(e, agent, submitted_by=submitted_by)
 
 
-def _render_pending_signoffs(entries: list[dict], signoffs: list[dict], agent: dict) -> None:
+def _render_pending_signoffs(
+    entries: list[dict], signoffs: list[dict], agent: dict, *, preview: bool = False
+) -> None:
     """The "Needs your sign-off" section at the top of My Dashboard: every
     evaluation still waiting on this agent, regardless of the period picked
     below, each with its full details, the sign-off form and the dispute form."""
@@ -323,12 +331,15 @@ def _render_pending_signoffs(entries: list[dict], signoffs: list[dict], agent: d
         )
         with st.expander(label, expanded=(i == 0)):
             if resign:
-                signoff.status_caption(e, so, as_agent=True)
+                signoff.status_caption(e, so, as_agent=not preview)
             _render_entry_details(e)
             st.divider()
-            signoff.render_form(e, agent)
+            signoff.render_form(e, agent, preview=preview)
             st.divider()
-            disputes.render_agent_form(e, agent)
+            if preview:
+                st.caption("The Question or dispute form appears here for the agent. It is not shown in this preview.")
+            else:
+                disputes.render_agent_form(e, agent)
     if n > signoff.MAX_SHOWN:
         st.caption(f"{n - signoff.MAX_SHOWN} more will appear here once you sign off on these.")
     st.divider()
