@@ -13,11 +13,11 @@ agent's own sign-in, sign-out, and "change my password" controls around it.
 
 import streamlit as st
 
-from lib import activity, agent_auth, agent_dashboard, ui
+from lib import activity, agent_auth, agent_dashboard, auth, db, ui
+from lib.constants import VIEW_AS_AGENT_REVIEWERS
 
 st.set_page_config(page_title="My Dashboard — ZEVO Quality Evaluation", page_icon=ui.LOGO_URL, layout="wide")
 ui.inject_style()
-activity.page_view("My Dashboard", role="agent")
 
 # This page is meant to be opened through app.py (which decides what the sidebar
 # shows). On the rare cold start where Streamlit runs this file directly from its
@@ -29,6 +29,52 @@ if not st.session_state.get("app_entry_ran"):
     )
 
 ui.page_heading("My Dashboard")
+
+# ---------- View as agent (reviewers only) ----------
+# Weng and Kristine can open any agent's dashboard exactly as the agent sees it,
+# without their password. Read-only: no sign-off, no question or dispute, no
+# sign out or password change, and nothing is written except the activity log
+# (recorded under the agent, marked as the reviewer's, like View as team lead).
+ss = st.session_state
+viewing_as = None
+if auth.current_reviewer() in VIEW_AS_AGENT_REVIEWERS:
+    roster = sorted(
+        [a for a in db.list_agents() if a.get("name")], key=lambda a: a["name"].lower()
+    )
+    NOT_VIEWING = "Not viewing as anyone"
+
+    def _switched_agent() -> None:
+        chosen = next((a for a in roster if a["name"] == ss.get("agent_view_as_name")), None)
+        if chosen:
+            db.record_login("agent", chosen["id"], chosen["name"], by_reviewer=auth.current_reviewer(), kind="view_as")
+
+    with st.container(border=True):
+        st.markdown("**View as agent**")
+        st.caption(
+            "For Weng and Kristine only. See exactly what an agent sees, without their password. "
+            "Read-only: nothing can be signed, submitted or changed from here."
+        )
+        picked = st.selectbox(
+            "Agent",
+            [NOT_VIEWING] + [a["name"] for a in roster],
+            key="agent_view_as_name",
+            on_change=_switched_agent,
+        )
+    viewing_as = next((a for a in roster if a["name"] == picked), None)
+else:
+    ss.pop("agent_view_as_name", None)
+
+activity.set_view_as_agent(viewing_as)
+activity.page_view("My Dashboard", role="agent")
+
+if viewing_as:
+    st.info(f"You are viewing as **{viewing_as['name']}**. This is a read-only view for reviewers.")
+    agent_dashboard.render(
+        {"id": viewing_as["id"], "name": viewing_as["name"]},
+        show_dispute_form=False,
+        period_key="agent_view_as",
+    )
+    st.stop()
 
 if not agent_auth.is_signed_in():
     st.caption("Sign in to see your own QA evaluations — your scores, how they're trending, and reviewer feedback.")
