@@ -274,7 +274,18 @@ def save_qa_entry(ticket_id: str, entry: dict) -> None:
         raise RuntimeError("QA log is unavailable right now — data can't be saved.")
     row = dict(entry)
     row["id"] = str(ticket_id)
-    db.table("qa_entries").upsert(row).execute()
+    try:
+        db.table("qa_entries").upsert(row).execute()
+    except Exception as exc:
+        # The phone audit's "recording_link" column comes from a SQL migration
+        # (sql/migrations/2026_10_19_add_recording_link.sql). If the app is
+        # updated before that has been run, still save the audit itself instead
+        # of failing; the link is simply not stored until the column exists.
+        if "recording_link" in row and "recording_link" in str(exc):
+            row.pop("recording_link")
+            db.table("qa_entries").upsert(row).execute()
+        else:
+            raise
 
 
 def delete_qa_entry(ticket_id: str) -> str | None:
