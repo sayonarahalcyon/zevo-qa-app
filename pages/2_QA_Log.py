@@ -9,10 +9,16 @@ from lib import activity, agent_auth, auth, db, sheets_backup, signin_panel, sig
 from lib.constants import (
     CHANNEL_OPTIONS,
     CRITICAL_ERRORS,
+    PHONE_CRITICAL_ERRORS,
+    PHONE_RUBRIC,
+    PHONE_RUBRIC_GUIDE,
     RUBRIC,
     RUBRIC_GUIDE,
     SIGN_IN_ACTIVITY_REVIEWERS,
+    critical_errors_for,
     is_excluded_agent_name,
+    rubric_channel,
+    rubric_for,
 )
 from lib.intercom_client import IntercomError, conversation_url, get_conversation, list_admins
 from lib.ticket_view import render_ticket
@@ -77,12 +83,15 @@ if ss.get("log_open_audit_key"):
         f"Reviewed by {entry.get('qa_reviewer') or '—'} · {entry.get('qa_date') or '—'}"
         + (" · 🧪 TEST" if entry.get("is_test") else "")
         + (" · 🚩 ESCALATED" if entry.get("is_escalated") else "")
+        + (" · 📞 PHONE" if (entry.get("channel") or "Chat") == "Phone" else "")
     )
 
     m1, m2, m3 = st.columns(3)
     m1.markdown(f"**Ticket:** [{ticket_id or '—'}]({ticket_url})" if ticket_url else f"**Ticket:** {ticket_id or '—'}")
     m2.markdown(f"**Renter/Host:** {entry.get('renter_host') or '—'}")
     m3.markdown(f"**Concern type:** {', '.join(entry.get('concern_types') or []) or '—'}")
+    if entry.get("recording_link"):
+        st.markdown(f"**Call recording:** [{entry['recording_link']}]({entry['recording_link']})")
 
     b_cols = st.columns([1, 1, 3])
     if ticket_id and b_cols[0].button("View full ticket conversation"):
@@ -111,13 +120,13 @@ if ss.get("log_open_audit_key"):
             "Max": r["max"],
             "Remarks": remarks.get(r["key"]) or "",
         }
-        for r in RUBRIC
+        for r in rubric_for(rubric_channel(entry))
     ]
     st.dataframe(pd.DataFrame(breakdown_rows), use_container_width=True, hide_index=True)
 
     st.subheader("Critical errors")
     crit = entry.get("critical_errors") or {}
-    flagged = [c["label"] for c in CRITICAL_ERRORS if crit.get(c["key"])]
+    flagged = [c["label"] for c in critical_errors_for(rubric_channel(entry)) if crit.get(c["key"])]
     if flagged:
         for label in flagged:
             st.error(f"🚫 {label}")
@@ -703,18 +712,33 @@ st.divider()
 
 # ---------- scoring guide ----------
 st.subheader("Scoring guide")
-with st.expander("Scoring rubric (5 categories, 100 points)"):
+with st.expander("Chat scoring rubric (5 categories, 100 points)"):
     for r in RUBRIC:
         st.markdown(f"**{r['name']}** (max {r['max']})")
         st.caption(RUBRIC_GUIDE[r["key"]])
 
-with st.expander('Critical errors (any = automatic FAIL)'):
+with st.expander('Chat critical errors (any = automatic FAIL)'):
     for c in CRITICAL_ERRORS:
+        st.markdown(f"**{c['label']}**")
+        st.caption(c["desc"])
+
+with st.expander("Phone scoring rubric (6 categories, 100 points)"):
+    st.caption(
+        "Phone audits are scored from the call recording, not a transcript, and the call's Intercom/ZOMP "
+        "notes are checked for Documentation."
+    )
+    for r in PHONE_RUBRIC:
+        st.markdown(f"**{r['name']}** (max {r['max']})")
+        st.caption(PHONE_RUBRIC_GUIDE[r["key"]])
+
+with st.expander('Phone critical errors (any = automatic FAIL)'):
+    for c in PHONE_CRITICAL_ERRORS:
         st.markdown(f"**{c['label']}**")
         st.caption(c["desc"])
 
 with st.expander("Result thresholds"):
     st.markdown(
+        "Chat and phone audits use the same thresholds.  \n\n"
         "**PASS** — total score 85 or higher, no critical errors.  \n"
         "**COACHING** — total score 70–84, no critical errors.  \n"
         "**FAIL** — total score below 70.  \n"
