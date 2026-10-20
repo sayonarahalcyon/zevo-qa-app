@@ -44,7 +44,7 @@ import pandas as pd
 import streamlit as st
 
 from lib import activity, db, disputes, period_picker, signoff, weeks
-from lib.constants import CRITICAL_ERRORS, RUBRIC
+from lib.constants import critical_errors_for, rubric_channel, rubric_for
 from lib.intercom_client import conversation_url
 from lib.ui import result_badge_md
 
@@ -204,66 +204,33 @@ def render(
     st.divider()
 
     # ---------- rubric category breakdown ----------
+    # Chat and phone audits are scored on different categories (five for chat,
+    # six for phone), so each channel gets its own breakdown. An agent with
+    # audits from only one channel sees a single breakdown, exactly as before.
     st.subheader(
         "Category breakdown",
         help=(
             "For each rubric category, the average points scored across the non-test evaluations in the "
             f"period selected above ({period.label}), shown as a share of that category's maximum. "
-            "Green is 85% or more of the maximum, amber is 60 to 84%, and red is below 60%."
+            "Green is 85% or more of the maximum, amber is 60 to 84%, and red is below 60%. "
+            "Chat and phone audits are scored on different categories, so each has its own breakdown."
         ),
     )
-    st.caption("Average score in each rubric category, as a share of that category's max points.")
-
-    cat_rows = []
-    for r in RUBRIC:
-        vals = [
-            (e.get("scores") or {}).get(r["key"])
-            for e in real_entries
-            if (e.get("scores") or {}).get(r["key"]) is not None
-        ]
-        if vals:
-            avg = sum(vals) / len(vals)
-            pct = round(avg / r["max"] * 100, 1)
-        else:
-            avg = pct = None
-        cat_rows.append({"Category": r["name"], "Avg": avg, "Max": r["max"], "Pct": pct})
-
-    scored_cats = [row for row in cat_rows if row["Pct"] is not None]
-    if scored_cats:
-        def _status_color(pct: float) -> str:
-            if pct >= 85:
-                return _ACCENT
-            if pct >= 60:
-                return _COACH
-            return _FAIL
-
-        chart_df = pd.DataFrame(
-            [{"Category": row["Category"], "Pct": row["Pct"], "Color": _status_color(row["Pct"])} for row in scored_cats]
-        )
-        bars = (
-            alt.Chart(chart_df)
-            .mark_bar(size=26, cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
-            .encode(
-                x=alt.X("Pct:Q", title="% of category max", scale=alt.Scale(domain=[0, 100])),
-                y=alt.Y("Category:N", sort=None, title=None),
-                color=alt.Color("Color:N", scale=None, legend=None),
-                tooltip=[alt.Tooltip("Category:N", title="Category"), alt.Tooltip("Pct:Q", title="% of max")],
-            )
-        )
-        labels = bars.mark_text(align="left", dx=4, color=_MUTED).encode(text=alt.Text("Pct:Q", format=".0f"))
-        st.altair_chart((bars + labels).properties(height=36 * len(scored_cats) + 40), use_container_width=True)
-
-        table_rows = [
-            {
-                "Category": row["Category"],
-                "Avg score": f'{row["Avg"]:.1f} / {row["Max"]}' if row["Avg"] is not None else "—",
-                "% of max": f'{row["Pct"]}%' if row["Pct"] is not None else "—",
-            }
-            for row in cat_rows
-        ]
-        st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
-    else:
+    by_channel = {
+        ch: [e for e in real_entries if rubric_channel(e) == ch] for ch in ("Chat", "Phone")
+    }
+    shown_channels = [ch for ch in ("Chat", "Phone") if by_channel[ch]]
+    if not shown_channels:
+        st.caption("Average score in each rubric category, as a share of that category's max points.")
         st.caption("No scored evaluations in this period." if not period.is_all_time else "No scored evaluations yet.")
+    else:
+        st.caption("Average score in each rubric category, as a share of that category's max points.")
+        for ch in shown_channels:
+            if len(shown_channels) > 1 or ch == "Phone":
+                n_cats = len(rubric_for(ch))
+                st.markdown(f"**{ch} audits** ({n_cats} categories)")
+            if not _render_category_breakdown(by_channel[ch], rubric_for(ch)):
+                st.caption("No scored evaluations in this period." if not period.is_all_time else "No scored evaluations yet.")
 
     st.divider()
 
@@ -286,6 +253,7 @@ def render(
         label = (
             f"{e.get('qa_date') or '—'} · {e.get('result') or '—'} · {e.get('total_score', '—')}/100"
             + (" · 🧪 TEST" if e.get("is_test") else "")
+            + (" · 📞 PHONE" if (e.get("channel") or "Chat") == "Phone" else "")
         )
         so = signoff_lookup.get(e.get("id")) if signoff_lookup is not None else None
         so_state = signoff.state(e, so) if signoff_lookup is not None else signoff.NOT_REQUIRED
@@ -303,6 +271,62 @@ def render(
             if not e.get("is_test") and show_dispute_form:
                 st.divider()
                 disputes.render_agent_form(e, agent, submitted_by=submitted_by)
+
+
+def _render_category_breakdown(real_entries: list[dict], rubric: list[dict]) -> bool:
+    """One chart and table of average score per category for one rubric.
+    Returns False when none of the entries has a score for any category."""
+    cat_rows = []
+    for r in rubric:
+        vals = [
+            (e.get("scores") or {}).get(r["key"])
+            for e in real_entries
+            if (e.get("scores") or {}).get(r["key"]) is not None
+        ]
+        if vals:
+            avg = sum(vals) / len(vals)
+            pct = round(avg / r["max"] * 100, 1)
+        else:
+            avg = pct = None
+        cat_rows.append({"Category": r["name"], "Avg": avg, "Max": r["max"], "Pct": pct})
+
+    scored_cats = [row for row in cat_rows if row["Pct"] is not None]
+    if not scored_cats:
+        return False
+
+    def _status_color(pct: float) -> str:
+        if pct >= 85:
+            return _ACCENT
+        if pct >= 60:
+            return _COACH
+        return _FAIL
+
+    chart_df = pd.DataFrame(
+        [{"Category": row["Category"], "Pct": row["Pct"], "Color": _status_color(row["Pct"])} for row in scored_cats]
+    )
+    bars = (
+        alt.Chart(chart_df)
+        .mark_bar(size=26, cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+        .encode(
+            x=alt.X("Pct:Q", title="% of category max", scale=alt.Scale(domain=[0, 100])),
+            y=alt.Y("Category:N", sort=None, title=None),
+            color=alt.Color("Color:N", scale=None, legend=None),
+            tooltip=[alt.Tooltip("Category:N", title="Category"), alt.Tooltip("Pct:Q", title="% of max")],
+        )
+    )
+    labels = bars.mark_text(align="left", dx=4, color=_MUTED).encode(text=alt.Text("Pct:Q", format=".0f"))
+    st.altair_chart((bars + labels).properties(height=36 * len(scored_cats) + 40), use_container_width=True)
+
+    table_rows = [
+        {
+            "Category": row["Category"],
+            "Avg score": f'{row["Avg"]:.1f} / {row["Max"]}' if row["Avg"] is not None else "—",
+            "% of max": f'{row["Pct"]}%' if row["Pct"] is not None else "—",
+        }
+        for row in cat_rows
+    ]
+    st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
+    return True
 
 
 def _render_pending_signoffs(
@@ -371,12 +395,12 @@ def _render_entry_details(e: dict) -> None:
             "Max": r["max"],
             "Remarks": remarks.get(r["key"]) or "",
         }
-        for r in RUBRIC
+        for r in rubric_for(rubric_channel(e))
     ]
     st.dataframe(pd.DataFrame(breakdown_rows), use_container_width=True, hide_index=True)
 
     crit = e.get("critical_errors") or {}
-    flagged = [c["label"] for c in CRITICAL_ERRORS if crit.get(c["key"])]
+    flagged = [c["label"] for c in critical_errors_for(rubric_channel(e)) if crit.get(c["key"])]
     for lbl in flagged:
         st.error(f"🚫 {lbl}")
 
