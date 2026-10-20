@@ -39,9 +39,16 @@ column A). The tabs are created automatically if they don't exist yet.
 
 import streamlit as st
 
-from lib.constants import RUBRIC
+from lib.constants import PHONE_RUBRIC, RUBRIC, rubric_channel
 
 RUBRIC_HEADERS = [h for r in RUBRIC for h in (r["name"], f"{r['name']} Remarks")]
+# Phone audits are scored on different categories, so they get their own
+# columns at the end of the sheet (after Channel) and the chat columns above
+# stay blank for them. Putting them last also means an existing sheet only
+# gains columns on the right; nothing already there moves.
+PHONE_RUBRIC_HEADERS = [
+    h for r in PHONE_RUBRIC for h in (f"Phone: {r['name']}", f"Phone: {r['name']} Remarks")
+]
 
 HEADER = [
     "Saved At",
@@ -61,6 +68,8 @@ HEADER = [
     "Test",
     "Escalated",
     "Channel",
+    "Recording Link",
+    *PHONE_RUBRIC_HEADERS,
 ]
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -127,13 +136,20 @@ def _entry_to_row(ticket_id: str, entry: dict) -> list:
     rebuild), so the two paths can never drift apart."""
     entry_scores = entry.get("scores") or {}
     entry_remarks = entry.get("remarks") or {}
+    is_phone = rubric_channel(entry) == "Phone"
     return [
         entry.get("updated_at", ""),
         str(ticket_id),
         entry.get("agent_name", ""),
         entry.get("qa_date", ""),
         entry.get("qa_reviewer", ""),
-        *[v for r in RUBRIC for v in (entry_scores.get(r["key"], ""), entry_remarks.get(r["key"], ""))],
+        *[
+            v
+            for r in RUBRIC
+            for v in (
+                ("", "") if is_phone else (entry_scores.get(r["key"], ""), entry_remarks.get(r["key"], ""))
+            )
+        ],
         entry.get("total_score", ""),
         entry.get("result", ""),
         ", ".join(entry.get("concern_types") or []),
@@ -145,6 +161,14 @@ def _entry_to_row(ticket_id: str, entry: dict) -> list:
         "TEST" if entry.get("is_test") else "",
         "ESCALATED" if entry.get("is_escalated") else "",
         entry.get("channel") or "Chat",
+        entry.get("recording_link") or "",
+        *[
+            v
+            for r in PHONE_RUBRIC
+            for v in (
+                (entry_scores.get(r["key"], ""), entry_remarks.get(r["key"], "")) if is_phone else ("", "")
+            )
+        ],
     ]
 
 
