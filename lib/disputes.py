@@ -20,7 +20,7 @@ from datetime import date, datetime
 import streamlit as st
 
 from lib import activity, auth, db, sheets_backup, weeks
-from lib.constants import DISPUTE_CATEGORIES
+from lib.constants import dispute_categories_for, rubric_channel
 
 
 def render_agent_form(entry: dict, agent: dict, *, submitted_by: str | None = None) -> None:
@@ -57,7 +57,7 @@ def render_agent_form(entry: dict, agent: dict, *, submitted_by: str | None = No
         if request_type == "dispute":
             categories = st.multiselect(
                 "Which QA category is this related to?",
-                DISPUTE_CATEGORIES,
+                dispute_categories_for(rubric_channel(entry)),
                 key=f"dispute_categories_{entry_id}",
             )
 
