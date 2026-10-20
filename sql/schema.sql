@@ -85,6 +85,8 @@ create table if not exists qa_entries (
                                                               -- Intercom conversation) or "Phone" (Phone Support
                                                               -- Ticket evaluations, added later) — see QA Log's
                                                               -- Audit log filter
+    recording_link         text,                              -- phone audits only: link to the call recording
+                                                              -- the audit was scored from
     created_at             timestamptz not null default now(),
     updated_at             timestamptz not null default now()
 );
