@@ -21,11 +21,11 @@ from lib import auth, db, sheets_backup
 from lib.constants import (
     CHANNEL_OPTIONS,
     CONCERN_TYPES,
-    CRITICAL_ERRORS,
     RENTER_HOST_OPTIONS,
-    RUBRIC,
     compute_result,
     compute_total,
+    critical_errors_for,
+    rubric_for,
 )
 from lib.ui import result_badge_md
 
@@ -123,6 +123,37 @@ def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, edi
             disabled=not signed_in,
         )
 
+    # Channel comes first because it decides which rubric and which critical
+    # errors the rest of the form shows: Chat audits use the five-category
+    # chat rubric, Phone audits the six-category phone rubric. Both are scored
+    # out of 100 with the same result thresholds.
+    #
+    # (An audit tagged Phone before the phone rubric existed carries chat-rubric
+    # scores. Opening it for edit shows the phone rubric, since it is a phone
+    # call, starting from the lowest level in each category; what it was scored
+    # on before is kept in the edit history.)
+    ch1, ch2 = st.columns(2)
+    with ch1:
+        channel = st.selectbox(
+            "Channel",
+            CHANNEL_OPTIONS,
+            index=_safe_index(CHANNEL_OPTIONS, (existing or {}).get("channel") or "Chat"),
+            key=f"channel_{ticket_id}",
+            help="Which support channel this audit came from. It decides which scoring rubric is used, shows as a tag, and is filterable in the Audit log.",
+            disabled=not signed_in,
+        )
+    with ch2:
+        recording_link = ""
+        if channel == "Phone":
+            recording_link = st.text_input(
+                "Call recording link",
+                value=(existing or {}).get("recording_link") or "",
+                key=f"recording_{ticket_id}",
+                help="Phone audits are scored from the call recording, not a transcript, because tone, pace and silence do not show in writing.",
+                disabled=not signed_in,
+            )
+    rubric = rubric_for(channel)
+
     ticket_link = st.text_input(
         "Ticket Link", value=(existing or {}).get("ticket_link") or ticket_url, key=f"link_{ticket_id}", disabled=not signed_in
     )
@@ -148,31 +179,52 @@ def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, edi
         disabled=not signed_in,
     )
 
-    st.markdown("**Scoring rubric**")
+    st.markdown("**Scoring rubric**" if channel != "Phone" else "**Scoring rubric (phone)**")
+    if channel == "Phone":
+        st.caption(
+            "Score from the call recording. Check the call's Intercom/ZOMP notes when scoring Documentation."
+        )
     scores = {}
     remarks = {}
     existing_scores = (existing or {}).get("scores") or {}
     existing_remarks = (existing or {}).get("remarks") or {}
-    for r in RUBRIC:
+    for r in rubric:
         rc1, rc2 = st.columns([1, 2])
         with rc1:
             st.caption(f"{r['name']} (max {r['max']})")
             default_val = existing_scores.get(r["key"])
-            idx = r["options"].index(default_val) if default_val in r["options"] else 0
-            scores[r["key"]] = st.radio(
-                r["key"],
-                r["options"],
-                index=idx,
-                key=f"score_{r['key']}_{ticket_id}",
-                horizontal=True,
-                disabled=not signed_in,
-                label_visibility="collapsed",
-            )
+            if r.get("options"):
+                idx = r["options"].index(default_val) if default_val in r["options"] else 0
+                scores[r["key"]] = st.radio(
+                    r["key"],
+                    r["options"],
+                    index=idx,
+                    key=f"score_{channel}_{r['key']}_{ticket_id}",
+                    horizontal=True,
+                    disabled=not signed_in,
+                    label_visibility="collapsed",
+                )
+            else:
+                try:
+                    start = min(max(int(default_val), 0), r["max"])
+                except (TypeError, ValueError):
+                    start = 0
+                scores[r["key"]] = st.number_input(
+                    r["key"],
+                    min_value=0,
+                    max_value=r["max"],
+                    value=start,
+                    step=1,
+                    key=f"score_{channel}_{r['key']}_{ticket_id}",
+                    disabled=not signed_in,
+                    label_visibility="collapsed",
+                    help=f"Whole number from 0 to {r['max']}.",
+                )
         with rc2:
             remarks[r["key"]] = st.text_input(
                 f"Remarks — {r['name']}",
                 value=existing_remarks.get(r["key"], ""),
-                key=f"remark_{r['key']}_{ticket_id}",
+                key=f"remark_{channel}_{r['key']}_{ticket_id}",
                 disabled=not signed_in,
                 label_visibility="collapsed",
                 placeholder="Remarks (optional)",
@@ -188,22 +240,23 @@ def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, edi
     st.markdown("**Critical Errors** (any \"Yes\" = automatic FAIL)")
     existing_crit = (existing or {}).get("critical_errors") or {}
     crit = {}
-    crit_cols = st.columns(len(CRITICAL_ERRORS))
-    for i, c in enumerate(CRITICAL_ERRORS):
+    critical_errors = critical_errors_for(channel)
+    crit_cols = st.columns(len(critical_errors))
+    for i, c in enumerate(critical_errors):
         with crit_cols[i]:
             crit[c["key"]] = st.checkbox(
-                c["label"], value=bool(existing_crit.get(c["key"])), key=f"crit_{c['key']}_{ticket_id}", disabled=not signed_in, help=c["desc"]
+                c["label"], value=bool(existing_crit.get(c["key"])), key=f"crit_{channel}_{c['key']}_{ticket_id}", disabled=not signed_in, help=c["desc"]
             )
 
-    total = compute_total(scores)
-    result = compute_result(total, crit)
+    total = compute_total(scores, channel)
+    result = compute_result(total, crit, channel)
     st.markdown(f"### Total: {total} / 100 &nbsp;&nbsp; {result_badge_md(result)}", unsafe_allow_html=True)
 
     if not signed_in:
         st.caption("Only Erwin, Weng, and Kristine can save changes here — everyone else can view read-only.")
         return
 
-    tc1, tc2, tc3 = st.columns(3)
+    tc1, tc2 = st.columns(2)
     is_test = tc1.checkbox(
         "🧪 Mark as a test audit",
         value=bool((existing or {}).get("is_test", False)),
@@ -215,13 +268,6 @@ def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, edi
         value=bool((existing or {}).get("is_escalated", default_escalated)),
         key=f"is_escalated_{ticket_id}",
         help="Auto-checked when this ticket came from 'Manually log a ticket' on Weekly QA Batch — toggle any time. Shows as a tag in the QA Log so it's easy to tell apart from the random pull.",
-    )
-    channel = tc3.selectbox(
-        "Channel",
-        CHANNEL_OPTIONS,
-        index=_safe_index(CHANNEL_OPTIONS, (existing or {}).get("channel") or "Chat"),
-        key=f"channel_{ticket_id}",
-        help="Which support channel this audit came from. Shows as a tag and is filterable in the Audit log.",
     )
 
     # A score only gets reopened after being saved for one of two reasons in
@@ -304,6 +350,10 @@ def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, edi
             "updated_at": now,
             "created_at": (existing or {}).get("created_at") or now,
         }
+        if channel == "Phone":
+            # Only phone audits carry this field, so a chat save never touches
+            # the column (and keeps working before the SQL migration is run).
+            entry["recording_link"] = recording_link.strip()
         try:
             db.save_qa_entry(ticket_id, entry)
             db.clear_cache()
