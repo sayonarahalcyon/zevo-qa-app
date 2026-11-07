@@ -10,6 +10,8 @@ store). Tables mirror the original collections 1:1 — see sql/schema.sql:
   disputes                 -- agent-submitted questions/disputes from My Dashboard (id = uuid4)
   login_events             -- one row per successful agent / team lead sign-in
   evaluation_signoffs      -- agent sign-off on each evaluation (id = qa_entries.id)
+  evaluators               -- phone-only evaluators (Phone Queue sign-in)
+  phone_queue              -- phone tickets loaded for evaluation (id = Intercom conversation id)
 """
 
 import re
@@ -18,6 +20,8 @@ from datetime import datetime, timezone
 
 import streamlit as st
 from supabase import create_client, Client
+
+from lib.constants import REVIEWER_NAMES as REVIEWER_NAMES_FOR_DB
 
 
 @st.cache_resource(show_spinner=False)
@@ -599,6 +603,171 @@ def list_login_events() -> list[dict]:
         return rows
 
 
+# ---------- evaluators (phone-only) ----------
+# People who audit phone tickets only, from the Phone Queue page (e.g. a
+# third-party evaluator with no Intercom access). Managed by Weng in QA Log ->
+# Manage phone evaluators; same resettable bcrypt password pattern as team
+# leads. See sql/migrations/2026_11_07_phone_queue_and_evaluators.sql.
+
+@st.cache_data(ttl=30, show_spinner=False)
+def list_evaluators() -> list[dict]:
+    db = get_client()
+    if not db:
+        return []
+    try:
+        res = db.table("evaluators").select("*").limit(50).execute()
+        return res.data or []
+    except Exception:
+        return []
+
+
+def create_evaluator(name: str) -> tuple[str | None, str | None]:
+    """Adds a phone evaluator. Returns (new_id, None) or (None, error)."""
+    db = get_client()
+    if not db:
+        return None, "Database is not connected — check the Supabase URL/key in Secrets."
+    if not name.strip():
+        return None, "Name is required."
+    if name.strip() in REVIEWER_NAMES_FOR_DB:
+        return None, "That name is already a reviewer."
+    base_slug = _slugify(name)
+    existing_ids = {e["id"] for e in list_evaluators()}
+    slug = base_slug
+    n = 2
+    while slug in existing_ids:
+        slug = f"{base_slug}-{n}"
+        n += 1
+    try:
+        db.table("evaluators").insert({"id": slug, "name": name.strip()}).execute()
+        list_evaluators.clear()
+        return slug, None
+    except Exception as e:
+        return None, str(e)
+
+
+def delete_evaluator(evaluator_id: str) -> str | None:
+    db = get_client()
+    if not db:
+        return "Database is not connected — check the Supabase URL/key in Secrets."
+    try:
+        db.table("evaluators").delete().eq("id", str(evaluator_id)).execute()
+        list_evaluators.clear()
+        return None
+    except Exception as e:
+        return str(e)
+
+
+def set_evaluator_password(evaluator_id: str, password_hash: str | None) -> str | None:
+    db = get_client()
+    if not db:
+        return "Database is not connected — check the Supabase URL/key in Secrets."
+    try:
+        db.table("evaluators").update({"password_hash": password_hash}).eq("id", str(evaluator_id)).execute()
+        list_evaluators.clear()
+        return None
+    except Exception as e:
+        return str(e)
+
+
+# ---------- phone_queue ----------
+# Phone tickets a reviewer loaded for evaluation. Claiming is a conditional
+# update (only succeeds while claimed_by is still empty), so two people
+# clicking Claim at the same moment can't both get the same ticket.
+
+@st.cache_data(ttl=15, show_spinner=False)
+def list_phone_queue() -> list[dict] | None:
+    """All queued tickets, or None if the table doesn't exist yet (the SQL
+    migration hasn't been run), so the page can say so instead of looking empty."""
+    db = get_client()
+    if not db:
+        return None
+    try:
+        res = db.table("phone_queue").select("*").limit(2000).execute()
+        return res.data or []
+    except Exception:
+        return None
+
+
+def add_to_phone_queue(rows: list[dict]) -> str | None:
+    """Inserts tickets; a ticket already in the queue is left as it is (its
+    claim and notified state are kept). Returns None or an error message."""
+    db = get_client()
+    if not db:
+        return "Database is not connected — check the Supabase URL/key in Secrets."
+    if not rows:
+        return None
+    try:
+        db.table("phone_queue").upsert(rows, on_conflict="ticket_id", ignore_duplicates=True).execute()
+        list_phone_queue.clear()
+        return None
+    except Exception as e:
+        return str(e)
+
+
+def remove_from_phone_queue(ticket_id: str) -> str | None:
+    db = get_client()
+    if not db:
+        return "Database is not connected — check the Supabase URL/key in Secrets."
+    try:
+        db.table("phone_queue").delete().eq("ticket_id", str(ticket_id)).execute()
+        list_phone_queue.clear()
+        return None
+    except Exception as e:
+        return str(e)
+
+
+def claim_phone_ticket(ticket_id: str, who: str) -> str | None:
+    """Claims a ticket for `who`. Returns None on success, or a message
+    (including "already claimed by X") if someone got there first."""
+    db = get_client()
+    if not db:
+        return "Database is not connected — check the Supabase URL/key in Secrets."
+    try:
+        res = (
+            db.table("phone_queue")
+            .update({"claimed_by": who, "claimed_at": datetime.now(timezone.utc).isoformat()})
+            .eq("ticket_id", str(ticket_id))
+            .is_("claimed_by", "null")
+            .execute()
+        )
+        list_phone_queue.clear()
+        if res.data:
+            return None
+        current = db.table("phone_queue").select("claimed_by").eq("ticket_id", str(ticket_id)).limit(1).execute()
+        holder = ((current.data or [{}])[0]).get("claimed_by")
+        return f"Already claimed by {holder}." if holder else "This ticket is no longer in the queue."
+    except Exception as e:
+        return str(e)
+
+
+def release_phone_ticket(ticket_id: str) -> str | None:
+    db = get_client()
+    if not db:
+        return "Database is not connected — check the Supabase URL/key in Secrets."
+    try:
+        db.table("phone_queue").update({"claimed_by": None, "claimed_at": None}).eq("ticket_id", str(ticket_id)).execute()
+        list_phone_queue.clear()
+        return None
+    except Exception as e:
+        return str(e)
+
+
+def mark_phone_tickets_notified(ticket_ids: list[str]) -> str | None:
+    db = get_client()
+    if not db:
+        return "Database is not connected — check the Supabase URL/key in Secrets."
+    if not ticket_ids:
+        return None
+    try:
+        db.table("phone_queue").update({"notified_at": datetime.now(timezone.utc).isoformat()}).in_(
+            "ticket_id", [str(t) for t in ticket_ids]
+        ).execute()
+        list_phone_queue.clear()
+        return None
+    except Exception as e:
+        return str(e)
+
+
 def clear_cache() -> None:
     """Call after any write so the next read reflects it immediately."""
     list_agents.clear()
@@ -608,3 +777,5 @@ def clear_cache() -> None:
     list_disputes.clear()
     list_login_events.clear()
     list_signoffs.clear()
+    list_evaluators.clear()
+    list_phone_queue.clear()
