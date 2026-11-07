@@ -12,7 +12,7 @@ import pandas as pd
 
 from lib.activity import ACTION_LABELS
 
-ROLE_LABELS = {"agent": "Agent", "team_lead": "Team lead", "reviewer": "Reviewer"}
+ROLE_LABELS = {"agent": "Agent", "team_lead": "Team lead", "reviewer": "Reviewer", "evaluator": "Phone evaluator"}
 
 SIGN_IN = "sign_in"
 VIEW_AS = "view_as"
