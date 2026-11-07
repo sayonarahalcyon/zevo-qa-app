@@ -148,6 +148,31 @@ create table if not exists disputes (
     updated_at           timestamptz not null default now()
 );
 
+-- Phone audit queue and phone-only evaluators (see
+-- sql/migrations/2026_11_07_phone_queue_and_evaluators.sql).
+create table if not exists evaluators (
+    id             text primary key,          -- slug, e.g. "alrose-santos"
+    name           text not null,
+    password_hash  text,                      -- NULL until Weng sets one
+    created_at     timestamptz not null default now(),
+    updated_at     timestamptz not null default now()
+);
+
+create table if not exists phone_queue (
+    ticket_id      text primary key,          -- Intercom conversation id
+    ticket_url     text,
+    agent_name     text,                      -- assignee when loaded, for the list
+    call_ids       jsonb not null default '[]'::jsonb,  -- Intercom call ids found on the ticket
+    loaded_by      text,
+    loaded_at      timestamptz not null default now(),
+    notified_at    timestamptz,               -- set when "Notify channel" announced it
+    claimed_by     text,
+    claimed_at     timestamptz
+);
+
+create index if not exists idx_phone_queue_claimed_by on phone_queue (claimed_by);
+create index if not exists idx_phone_queue_notified on phone_queue (notified_at);
+
 create index if not exists idx_agents_team_lead on agents (team_lead_id);
 create index if not exists idx_qa_entries_agent on qa_entries (agent_name);
 create index if not exists idx_qa_entries_qa_date on qa_entries (qa_date);
