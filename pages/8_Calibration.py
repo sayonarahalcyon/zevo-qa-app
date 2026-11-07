@@ -24,7 +24,14 @@ import pandas as pd
 import streamlit as st
 
 from lib import auth, db, evaluator_auth, ui
-from lib.constants import REVIEWER_NAMES, compute_result, compute_total, critical_errors_for, rubric_for
+from lib.constants import (
+    PHONE_RUBRIC_GUIDE,
+    REVIEWER_NAMES,
+    compute_result,
+    compute_total,
+    critical_errors_for,
+    rubric_for,
+)
 from lib.intercom_client import IntercomError, conversation_url, get_call_ids, get_conversation
 from lib.ticket_view import learn_agents_from_conversation, render_ticket
 
@@ -101,6 +108,31 @@ if msg:
     (st.success if msg[0] == "ok" else st.error)(msg[1])
 
 
+def _scoring_guide(expanded: bool = False) -> None:
+    """The phone rubric, critical errors and result thresholds, same wording as
+    QA Log's Scoring guide, so everyone calibrates against the same standard."""
+    st.subheader("Phone scoring guide")
+    with st.expander("Phone scoring rubric (6 categories, 100 points)", expanded=expanded):
+        st.caption(
+            "Phone audits are scored from the call recording, not a transcript, and the call's Intercom/ZOMP "
+            "notes are checked for Documentation. Each category takes a whole number from 0 to its maximum."
+        )
+        for r in RUBRIC:
+            st.markdown(f"**{r['name']}** (max {r['max']})")
+            st.caption(PHONE_RUBRIC_GUIDE.get(r["key"], ""))
+    with st.expander("Phone critical errors (any = automatic FAIL)", expanded=expanded):
+        for c in CRITICAL:
+            st.markdown(f"**{c['label']}**")
+            st.caption(c["desc"])
+    with st.expander("Result thresholds", expanded=expanded):
+        st.markdown(
+            "**PASS**: total score 85 or higher, no critical errors.  \n"
+            "**COACHING**: total score 70 to 84, no critical errors.  \n"
+            "**FAIL**: total score below 70.  \n"
+            "**AUTO FAIL**: any critical error, regardless of total score."
+        )
+
+
 def _comparison(session: dict, scores: dict) -> None:
     people = [p for p in (session.get("participants") or []) if p in scores]
     if not people:
@@ -167,6 +199,7 @@ def _score_form(session: dict, existing: dict | None, locked: bool) -> None:
             scores[r["key"]] = st.number_input(
                 r["key"], min_value=0, max_value=r["max"], value=start, step=1,
                 key=f"cal_{sid}_{r['key']}", disabled=locked, label_visibility="collapsed",
+                help=PHONE_RUBRIC_GUIDE.get(r["key"]),
             )
         with c2:
             remarks[r["key"]] = st.text_input(
@@ -240,6 +273,8 @@ if open_id:
     except IntercomError as e:
         st.error(f"Could not load conversation #{session['ticket_id']}: {e}")
 
+    st.divider()
+    _scoring_guide()
     st.divider()
     if me in participants:
         _score_form(session, scores.get(me), locked=done or closed)
@@ -340,3 +375,6 @@ for tab, rows in ((t_open, open_sessions), (t_closed, closed_sessions)):
             if c[3].button("Open", key=f"cal_open_{s['id']}", use_container_width=True):
                 ss["cal_open_session"] = s["id"]
                 st.rerun()
+
+st.divider()
+_scoring_guide()
