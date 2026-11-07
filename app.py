@@ -20,6 +20,7 @@ my_dashboard = st.Page("pages/4_My_Dashboard.py", title="My Dashboard", icon="�
 questions_disputes = st.Page("pages/5_Questions_Disputes.py", title="Questions & Disputes", icon="❓")
 team_lead_dashboard = st.Page("pages/6_Team_Lead_Dashboard.py", title="Team Lead Dashboard", icon="🧑‍💼")
 phone_queue = st.Page("pages/7_Phone_Queue.py", title="Phone Queue", icon="📞")
+calibration = st.Page("pages/8_Calibration.py", title="Calibration", icon="🎯")
 
 TEAM_LEAD_LINK_PATH = "Team_Lead_Dashboard"  # the dashboard's own address, shared with team leads
 AGENT_LINK_PATH = "My_Dashboard"  # My Dashboard's own address, shared with agents
@@ -64,16 +65,18 @@ def dashboard_only_pages(file: str, title: str, icon: str, url_path: str) -> lis
 # both) keeps the full list, since the reviewer pages are theirs to use.
 st.session_state["app_entry_ran"] = True  # lets the dashboard pages tell they were opened through this file
 
-all_pages = [home, weekly, phone_queue, qa_log, questions_disputes, historical, my_dashboard, team_lead_dashboard]
+all_pages = [home, weekly, phone_queue, calibration, qa_log, questions_disputes, historical, my_dashboard, team_lead_dashboard]
 kwargs = {}
 
 if auth.is_signed_in():
     pages = all_pages
 elif evaluator_auth.is_signed_in():
     # A phone evaluator (e.g. the third-party evaluator) sees only the Phone
-    # Queue; nothing else is registered for them. A single registered page
-    # hides the sidebar, same as a signed-in team lead.
-    pages = [st.Page("pages/7_Phone_Queue.py", title="Phone Queue", icon="📞", default=True)]
+    # Queue and Calibration; nothing else is registered for them.
+    pages = [
+        st.Page("pages/7_Phone_Queue.py", title="Phone Queue", icon="📞", default=True),
+        st.Page("pages/8_Calibration.py", title="Calibration", icon="🎯"),
+    ]
 elif opened_from_link(TEAM_LEAD_LINK_PATH):
     pages = dashboard_only_pages(
         "pages/6_Team_Lead_Dashboard.py", "Team Lead Dashboard", "🧑‍💼", TEAM_LEAD_LINK_PATH
