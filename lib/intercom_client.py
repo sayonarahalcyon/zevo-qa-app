@@ -25,6 +25,12 @@ import streamlit as st
 
 API_BASE = "https://api.intercom.io"
 INTERCOM_VERSION = "2.11"
+# The Calls API (call details, recording, transcript) and the call id on a
+# conversation's call_summary part are only in newer API versions (2.17 per
+# Intercom's changelog), so call-related requests send this version instead.
+# Everything else stays on INTERCOM_VERSION, which is what the rest of the app
+# was written and checked against.
+CALLS_API_VERSION = "2.17"
 
 
 class IntercomError(Exception):
@@ -40,7 +46,7 @@ def _token() -> str | None:
         return None
 
 
-def _headers() -> dict:
+def _headers(version: str = INTERCOM_VERSION) -> dict:
     token = _token()
     if not token:
         raise IntercomError("Intercom is not connected — add the access token in Secrets.", "server_not_connected")
@@ -48,7 +54,7 @@ def _headers() -> dict:
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
         "Content-Type": "application/json",
-        "Intercom-Version": INTERCOM_VERSION,
+        "Intercom-Version": version,
     }
 
 
@@ -56,11 +62,7 @@ def _to_epoch(d: date) -> int:
     return int(datetime(d.year, d.month, d.day).timestamp())
 
 
-def _request(method: str, path: str, **kwargs) -> dict:
-    try:
-        resp = requests.request(method, f"{API_BASE}{path}", headers=_headers(), timeout=30, **kwargs)
-    except requests.RequestException as e:
-        raise IntercomError(f"Could not reach Intercom: {e}", "server_unavailable")
+def _raise_for_status(resp) -> None:
     if resp.status_code == 401:
         raise IntercomError("Intercom access token is invalid or expired.", "needs_reauth")
     if resp.status_code == 429:
@@ -72,6 +74,18 @@ def _request(method: str, path: str, **kwargs) -> dict:
         except Exception:
             detail = resp.text[:300]
         raise IntercomError(detail or f"Intercom returned HTTP {resp.status_code}.", "tool_error")
+
+
+def _send(method: str, path: str, version: str = INTERCOM_VERSION, **kwargs):
+    try:
+        return requests.request(method, f"{API_BASE}{path}", headers=_headers(version), timeout=30, **kwargs)
+    except requests.RequestException as e:
+        raise IntercomError(f"Could not reach Intercom: {e}", "server_unavailable")
+
+
+def _request(method: str, path: str, version: str = INTERCOM_VERSION, **kwargs) -> dict:
+    resp = _send(method, path, version, **kwargs)
+    _raise_for_status(resp)
     return resp.json()
 
 
@@ -198,3 +212,95 @@ def build_transcript(convo: dict) -> list[dict]:
             entries.append({"kind": "event", "text": f"{who} · {label}", "created_at": p.get("created_at")})
     entries.sort(key=lambda e: e.get("created_at") or 0)
     return entries
+
+
+# ---------- phone calls ----------
+# A phone ticket's call shows up in the conversation as a "call_summary" part
+# whose event_details.call_id is the id the Calls API uses. From that id the
+# app can get the recording (Intercom answers with a redirect to a signed,
+# short-lived audio URL) and the transcript, using the app's own access token.
+# That is what lets someone with no Intercom login (a third-party evaluator)
+# listen to the call inside the QA App.
+
+def find_call_ids(convo: dict) -> list[str]:
+    """Call ids found on a conversation's parts, oldest first, no duplicates."""
+    ids = []
+    parts = ((convo.get("conversation_parts") or {}).get("conversation_parts")) or []
+    for p in parts:
+        details = p.get("event_details") or {}
+        cid = details.get("call_id")
+        if cid and str(cid) not in ids:
+            ids.append(str(cid))
+    return ids
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def get_call_ids(conversation_id: str) -> list[str]:
+    """Fetches the conversation with the newer API version (the one that
+    includes call ids on call_summary parts) and returns its call ids."""
+    convo = _request("GET", f"/conversations/{conversation_id}", version=CALLS_API_VERSION)
+    return find_call_ids(convo)
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def get_call(call_id: str) -> dict:
+    return _request("GET", f"/calls/{call_id}", version=CALLS_API_VERSION)
+
+
+@st.cache_data(ttl=240, show_spinner=False)
+def get_call_recording_url(call_id: str) -> str | None:
+    """The signed URL of the call's recording, or None if the call has none.
+    Intercom answers GET /calls/{id}/recording with a 302 to a signed URL; it
+    is short-lived, so it is cached for a few minutes only."""
+    resp = _send("GET", f"/calls/{call_id}/recording", version=CALLS_API_VERSION, allow_redirects=False)
+    if resp.status_code == 404:
+        return None
+    if resp.status_code in (301, 302, 303, 307, 308):
+        return resp.headers.get("Location") or None
+    _raise_for_status(resp)
+    # Not a redirect but a success: a newer API might return JSON with the URL.
+    try:
+        data = resp.json()
+        return data.get("url") or data.get("recording_url")
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def get_call_recording_bytes(call_id: str) -> tuple[bytes, str] | None:
+    """Fallback when the browser can't play the signed URL directly: the app
+    downloads the audio itself and hands the bytes to the player."""
+    url = get_call_recording_url(call_id)
+    if not url:
+        return None
+    try:
+        resp = requests.get(url, timeout=60)
+    except requests.RequestException as e:
+        raise IntercomError(f"Could not download the recording: {e}", "server_unavailable")
+    if resp.status_code >= 400:
+        raise IntercomError(f"Recording download returned HTTP {resp.status_code}.", "tool_error")
+    return resp.content, (resp.headers.get("Content-Type") or "audio/mpeg").split(";")[0]
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def get_call_transcript(call_id: str) -> str | list | None:
+    """The call's transcript: plain text, or a list of turns if Intercom
+    answers with JSON. None if the call has no transcript. Redirects (to a
+    signed file URL) are followed; requests drops the Authorization header
+    when a redirect goes to another host."""
+    resp = _send("GET", f"/calls/{call_id}/transcript", version=CALLS_API_VERSION)
+    if resp.status_code == 404:
+        return None
+    _raise_for_status(resp)
+    ctype = resp.headers.get("Content-Type") or ""
+    if "json" in ctype:
+        try:
+            data = resp.json()
+        except Exception:
+            return resp.text
+        if isinstance(data, dict):
+            for key in ("transcript", "turns", "data", "entries"):
+                if isinstance(data.get(key), (list, str)):
+                    return data[key]
+        return data
+    return resp.text
