@@ -33,7 +33,7 @@ st.set_page_config(page_title="Phone Queue — ZEVO Quality Evaluation", page_ic
 ui.inject_style()
 
 RELEASE_ANY = "Weng Yee"  # besides the person who claimed it, who can release a claimed ticket
-QUEUE_ADMIN = "Weng Yee"  # the only one who sees Load phone tickets and Notify channel, for now
+QUEUE_ADMIN = "Weng Yee"  # the only one who sees Load phone tickets, Notify channel and Remove, for now
 ss = st.session_state
 
 is_reviewer = auth.is_signed_in()
@@ -270,7 +270,7 @@ with t_wait:
             else:
                 ss["pq_open_ticket"] = tid
             st.rerun()
-        if is_reviewer and c[4].button("Remove", key=f"pq_remove_{tid}"):
+        if is_queue_admin and c[4].button("Remove", key=f"pq_remove_{tid}"):
             err = db.remove_from_phone_queue(tid)
             _flash("error", err) if err else _flash("ok", f"Removed #{tid} from the queue.")
             st.rerun()
