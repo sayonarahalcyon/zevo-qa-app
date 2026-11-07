@@ -161,6 +161,11 @@ CRITICAL_ERRORS = [
         "label": "Ignored safety issue",
         "desc": "Agent failed to properly prioritize or escalate a safety or urgent concern (stranded renter, battery, lockout).",
     },
+    {
+        "key": "language",
+        "label": "Communication – Language Used",
+        "desc": "Professional English should be maintained in all work-related communications, including internal notes and conversations, as these remain visible to other team members.",
+    },
 ]
 
 # Categories offered on the "Question or dispute about this audit?" form on
