@@ -9,6 +9,7 @@ from __future__ import annotations
 import streamlit as st
 
 from lib import db
+from lib.call_media import render_call_media
 from lib.constants import is_excluded_agent_name
 from lib.intercom_client import build_transcript, conversation_url
 from lib.qa_form import render as render_qa_form
@@ -42,7 +43,20 @@ def learn_agents_from_conversation(convo: dict) -> dict:
     return seen
 
 
-def render_ticket(convo: dict, ticket_url: str, on_pick_another=None, default_escalated: bool = False) -> None:
+def render_ticket(
+    convo: dict,
+    ticket_url: str,
+    on_pick_another=None,
+    default_escalated: bool = False,
+    force_phone: bool = False,
+    evaluator_mode: bool = False,
+    show_form: bool = True,
+    form_note: str = "",
+) -> None:
+    """force_phone: the ticket came from the Phone Queue, so the audit form is
+    locked to the phone rubric. evaluator_mode: a phone evaluator (no Intercom
+    access, no reviewer tools) is looking at it, so the Intercom link and the
+    Mark reviewed button are left out."""
     ticket_id = str(convo["id"])
     reviewed_map = db.list_reviewed()
     is_reviewed = ticket_id in reviewed_map
@@ -67,22 +81,38 @@ def render_ticket(convo: dict, ticket_url: str, on_pick_another=None, default_es
     m3.metric("Parts", (convo.get("statistics") or {}).get("count_conversation_parts", 0))
     m4.metric("Reopens", (convo.get("statistics") or {}).get("count_reopens", 0))
 
-    a1, a2, a3 = st.columns([1, 1, 3])
-    a1.link_button("Open in Intercom ↗", ticket_url or conversation_url(ticket_id))
-    if on_pick_another and a2.button("Pick another", key=f"again_{ticket_id}"):
-        on_pick_another()
-        st.rerun()
-    if is_reviewed:
-        a3.button("Marked reviewed", disabled=True, key=f"reviewed_disabled_{ticket_id}")
-    else:
-        if a3.button("Mark reviewed", key=f"reviewed_{ticket_id}"):
-            db.mark_reviewed(ticket_id, title, convo.get("state", ""), conversation_url(ticket_id))
-            db.clear_cache()
+    if not evaluator_mode:
+        a1, a2, a3 = st.columns([1, 1, 3])
+        a1.link_button("Open in Intercom ↗", ticket_url or conversation_url(ticket_id))
+        if on_pick_another and a2.button("Pick another", key=f"again_{ticket_id}"):
+            on_pick_another()
             st.rerun()
+        if is_reviewed:
+            a3.button("Marked reviewed", disabled=True, key=f"reviewed_disabled_{ticket_id}")
+        else:
+            if a3.button("Mark reviewed", key=f"reviewed_{ticket_id}"):
+                db.mark_reviewed(ticket_id, title, convo.get("state", ""), conversation_url(ticket_id))
+                db.clear_cache()
+                st.rerun()
+
+    # Any ticket with a phone call on it gets the recording and transcript,
+    # fetched by the app from Intercom, so they can be reviewed without
+    # opening Intercom.
+    render_call_media(ticket_id)
 
     with st.expander(f"💬 Conversation ({len(transcript_entries)} messages)", expanded=False):
         render_transcript(transcript_entries)
 
     seen = learn_agents_from_conversation(convo)
+    if not show_form:
+        if form_note:
+            st.info(form_note)
+        return
     guessed_agent = next((n for aid, n in seen.items() if str(aid) == str(convo.get("admin_assignee_id"))), "")
-    render_qa_form(convo, ticket_url or conversation_url(ticket_id), guessed_agent, default_escalated=default_escalated)
+    render_qa_form(
+        convo,
+        ticket_url or conversation_url(ticket_id),
+        guessed_agent,
+        default_escalated=default_escalated,
+        force_phone=force_phone,
+    )
