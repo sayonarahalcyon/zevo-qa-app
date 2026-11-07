@@ -17,7 +17,7 @@ from datetime import date, datetime
 
 import streamlit as st
 
-from lib import auth, db, sheets_backup
+from lib import auth, db, evaluator_auth, sheets_backup
 from lib.constants import (
     CHANNEL_OPTIONS,
     CONCERN_TYPES,
@@ -36,20 +36,52 @@ EDIT_REASONS = [
 ]
 
 
+def _auditor_name() -> str | None:
+    """Who is saving: a signed-in reviewer, or else a signed-in phone evaluator."""
+    return auth.current_reviewer() or evaluator_auth.current_name()
+
+
+def _evaluator_only() -> bool:
+    """A phone evaluator is signed in and no reviewer is: phone audits only,
+    no test or escalated flags."""
+    return evaluator_auth.is_signed_in() and not auth.is_signed_in()
+
+
+def _can_edit(qa: dict) -> bool:
+    if auth.is_signed_in():
+        return True
+    # A phone evaluator can reopen only a phone audit they saved themselves.
+    return (
+        evaluator_auth.is_signed_in()
+        and (qa.get("channel") or "Chat") == "Phone"
+        and qa.get("qa_reviewer") == evaluator_auth.current_name()
+    )
+
+
 def _agent_options() -> list[str]:
     return sorted({a["name"] for a in db.list_agents() if a.get("name")})
 
 
-def render(convo: dict, ticket_url: str, guessed_agent_name: str, default_escalated: bool = False) -> None:
+def render(
+    convo: dict,
+    ticket_url: str,
+    guessed_agent_name: str,
+    default_escalated: bool = False,
+    force_phone: bool = False,
+) -> None:
+    """force_phone: the ticket came from the Phone Queue, so the form is locked
+    to the phone rubric for everyone. A signed-in phone evaluator always gets
+    the phone rubric, wherever the ticket was opened."""
     ticket_id = str(convo["id"])
     existing = db.get_qa_entry(ticket_id)
     editing_key = f"qa_editing_{ticket_id}"
+    phone_only = force_phone or _evaluator_only()
 
-    if existing and not st.session_state.get(editing_key):
+    if existing and (not st.session_state.get(editing_key) or not _can_edit(existing)):
         _render_summary(ticket_id, existing, editing_key)
         return
 
-    _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, editing_key, default_escalated)
+    _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, editing_key, default_escalated, phone_only)
 
 
 def _render_summary(ticket_id: str, qa: dict, editing_key: str) -> None:
@@ -83,7 +115,7 @@ def _render_summary(ticket_id: str, qa: dict, editing_key: str) -> None:
             + f"dited {len(edit_log)}x · last by {last.get('edited_by') or '—'} "
             f"on {_fmt_date(last.get('edited_at'))} ({last.get('reason', '—')}){score_note}"
         )
-    if auth.is_signed_in():
+    if _can_edit(qa):
         if cols[3].button("Edit score", key=f"edit_{ticket_id}"):
             st.session_state[editing_key] = True
             st.rerun()
@@ -91,7 +123,9 @@ def _render_summary(ticket_id: str, qa: dict, editing_key: str) -> None:
         cols[3].caption("Sign in to edit")
 
 
-def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, editing_key, default_escalated: bool = False) -> None:
+def _render_form(
+    ticket_id, convo, ticket_url, guessed_agent_name, existing, editing_key, default_escalated: bool = False, phone_only: bool = False
+) -> None:
     st.divider()
     header_cols = st.columns([4, 1])
     header_cols[0].subheader("QA Audit" + (" — editing" if existing else ""))
@@ -99,7 +133,8 @@ def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, edi
         st.session_state[editing_key] = False
         st.rerun()
 
-    signed_in = auth.is_signed_in()
+    signed_in = auth.is_signed_in() or evaluator_auth.is_signed_in()
+    is_reviewer = auth.is_signed_in()
     if not signed_in:
         st.info('Sign in as Erwin, Weng, or Kristine in the sidebar to submit or edit a QA audit.')
 
@@ -134,14 +169,25 @@ def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, edi
     # on before is kept in the edit history.)
     ch1, ch2 = st.columns(2)
     with ch1:
-        channel = st.selectbox(
-            "Channel",
-            CHANNEL_OPTIONS,
-            index=_safe_index(CHANNEL_OPTIONS, (existing or {}).get("channel") or "Chat"),
-            key=f"channel_{ticket_id}",
-            help="Which support channel this audit came from. It decides which scoring rubric is used, shows as a tag, and is filterable in the Audit log.",
-            disabled=not signed_in,
-        )
+        if phone_only:
+            # Phone Queue tickets and phone evaluators: always the phone rubric.
+            channel = "Phone"
+            st.selectbox(
+                "Channel",
+                ["Phone"],
+                key=f"channel_locked_{ticket_id}",
+                help="Locked to Phone: this ticket came from the Phone Queue.",
+                disabled=True,
+            )
+        else:
+            channel = st.selectbox(
+                "Channel",
+                CHANNEL_OPTIONS,
+                index=_safe_index(CHANNEL_OPTIONS, (existing or {}).get("channel") or "Chat"),
+                key=f"channel_{ticket_id}",
+                help="Which support channel this audit came from. It decides which scoring rubric is used, shows as a tag, and is filterable in the Audit log.",
+                disabled=not signed_in,
+            )
     with ch2:
         recording_link = ""
         if channel == "Phone":
@@ -149,7 +195,7 @@ def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, edi
                 "Call recording link",
                 value=(existing or {}).get("recording_link") or "",
                 key=f"recording_{ticket_id}",
-                help="Phone audits are scored from the call recording, not a transcript, because tone, pace and silence do not show in writing.",
+                help="Optional. The recording also plays above, from Intercom, for anyone signed in to this app. Phone audits are scored from the recording, not a transcript, because tone, pace and silence do not show in writing.",
                 disabled=not signed_in,
             )
     rubric = rubric_for(channel)
@@ -256,19 +302,24 @@ def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, edi
         st.caption("Only Erwin, Weng, and Kristine can save changes here — everyone else can view read-only.")
         return
 
-    tc1, tc2 = st.columns(2)
-    is_test = tc1.checkbox(
-        "🧪 Mark as a test audit",
-        value=bool((existing or {}).get("is_test", False)),
-        key=f"is_test_{ticket_id}",
-        help="Saved like any other audit, but excluded from the QA Log's dashboard totals and per-agent rollup.",
-    )
-    is_escalated = tc2.checkbox(
-        "🚩 Escalated (manually added, not the random pull)",
-        value=bool((existing or {}).get("is_escalated", default_escalated)),
-        key=f"is_escalated_{ticket_id}",
-        help="Auto-checked when this ticket came from 'Manually log a ticket' on Weekly QA Batch — toggle any time. Shows as a tag in the QA Log so it's easy to tell apart from the random pull.",
-    )
+    if is_reviewer:
+        tc1, tc2 = st.columns(2)
+        is_test = tc1.checkbox(
+            "🧪 Mark as a test audit",
+            value=bool((existing or {}).get("is_test", False)),
+            key=f"is_test_{ticket_id}",
+            help="Saved like any other audit, but excluded from the QA Log's dashboard totals and per-agent rollup.",
+        )
+        is_escalated = tc2.checkbox(
+            "🚩 Escalated (manually added, not the random pull)",
+            value=bool((existing or {}).get("is_escalated", default_escalated)),
+            key=f"is_escalated_{ticket_id}",
+            help="Auto-checked when this ticket came from 'Manually log a ticket' on Weekly QA Batch — toggle any time. Shows as a tag in the QA Log so it's easy to tell apart from the random pull.",
+        )
+    else:
+        # Phone evaluators don't set these; an edit keeps whatever a reviewer set.
+        is_test = bool((existing or {}).get("is_test", False))
+        is_escalated = bool((existing or {}).get("is_escalated", default_escalated))
 
     # A score only gets reopened after being saved for one of two reasons in
     # practice — a dispute, or a reviewer catching a mistake — so editing an
@@ -307,7 +358,7 @@ def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, edi
             edit_log.append(
                 {
                     "edited_at": now,
-                    "edited_by": auth.current_reviewer(),
+                    "edited_by": _auditor_name(),
                     "reason": (
                         "Dispute"
                         if edit_reason.startswith("Dispute")
@@ -341,7 +392,7 @@ def _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, edi
             "result": result,
             "critical_errors": crit,
             "critical_error_status": "CRITICAL ERROR" if any(crit.values()) else "OK",
-            "qa_reviewer": auth.current_reviewer(),
+            "qa_reviewer": _auditor_name(),
             "qa_date": qa_date.isoformat(),
             "is_test": is_test,
             "is_escalated": is_escalated,
