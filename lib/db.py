@@ -12,6 +12,8 @@ store). Tables mirror the original collections 1:1 — see sql/schema.sql:
   evaluation_signoffs      -- agent sign-off on each evaluation (id = qa_entries.id)
   evaluators               -- phone-only evaluators (Phone Queue sign-in)
   phone_queue              -- phone tickets loaded for evaluation (id = Intercom conversation id)
+  calibration_sessions     -- calibration: one phone ticket scored by several evaluators
+  calibration_scores       -- each evaluator's calibration score (never counted in stats)
 """
 
 import re
@@ -768,6 +770,102 @@ def mark_phone_tickets_notified(ticket_ids: list[str]) -> str | None:
         return str(e)
 
 
+# ---------- calibration ----------
+# One phone ticket scored independently by several chosen evaluators, to check
+# they score consistently. Kept apart from qa_entries on purpose: calibration
+# scores never count toward any dashboard, rollup, pass rate or agent view.
+# See sql/migrations/2026_11_07b_calibration.sql.
+
+@st.cache_data(ttl=15, show_spinner=False)
+def list_calibration_sessions() -> list[dict] | None:
+    """All sessions, or None if the tables don't exist yet."""
+    db = get_client()
+    if not db:
+        return None
+    try:
+        res = db.table("calibration_sessions").select("*").limit(500).execute()
+        return res.data or []
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def list_calibration_scores() -> list[dict]:
+    db = get_client()
+    if not db:
+        return []
+    try:
+        res = db.table("calibration_scores").select("*").limit(5000).execute()
+        return res.data or []
+    except Exception:
+        return []
+
+
+def create_calibration_session(ticket_id: str, ticket_url: str, agent_name: str, participants: list[str], created_by: str) -> tuple[str | None, str | None]:
+    db = get_client()
+    if not db:
+        return None, "Database is not connected \u2014 check the Supabase URL/key in Secrets."
+    sid = str(uuid.uuid4())
+    try:
+        db.table("calibration_sessions").insert(
+            {
+                "id": sid,
+                "ticket_id": str(ticket_id),
+                "ticket_url": ticket_url,
+                "agent_name": agent_name,
+                "participants": participants,
+                "created_by": created_by,
+            }
+        ).execute()
+        list_calibration_sessions.clear()
+        return sid, None
+    except Exception as e:
+        return None, str(e)
+
+
+def save_calibration_score(session_id: str, evaluator: str, row: dict) -> str | None:
+    db = get_client()
+    if not db:
+        return "Database is not connected \u2014 check the Supabase URL/key in Secrets."
+    try:
+        db.table("calibration_scores").upsert(
+            {**row, "session_id": session_id, "evaluator": evaluator, "submitted_at": datetime.now(timezone.utc).isoformat()},
+            on_conflict="session_id,evaluator",
+        ).execute()
+        list_calibration_scores.clear()
+        return None
+    except Exception as e:
+        return str(e)
+
+
+def close_calibration_session(session_id: str, reopen: bool = False) -> str | None:
+    db = get_client()
+    if not db:
+        return "Database is not connected \u2014 check the Supabase URL/key in Secrets."
+    try:
+        db.table("calibration_sessions").update(
+            {"closed_at": None if reopen else datetime.now(timezone.utc).isoformat()}
+        ).eq("id", str(session_id)).execute()
+        list_calibration_sessions.clear()
+        return None
+    except Exception as e:
+        return str(e)
+
+
+def delete_calibration_session(session_id: str) -> str | None:
+    """Deletes a session and (by cascade) its scores."""
+    db = get_client()
+    if not db:
+        return "Database is not connected \u2014 check the Supabase URL/key in Secrets."
+    try:
+        db.table("calibration_sessions").delete().eq("id", str(session_id)).execute()
+        list_calibration_sessions.clear()
+        list_calibration_scores.clear()
+        return None
+    except Exception as e:
+        return str(e)
+
+
 def clear_cache() -> None:
     """Call after any write so the next read reflects it immediately."""
     list_agents.clear()
@@ -779,3 +877,5 @@ def clear_cache() -> None:
     list_signoffs.clear()
     list_evaluators.clear()
     list_phone_queue.clear()
+    list_calibration_sessions.clear()
+    list_calibration_scores.clear()
