@@ -1,7 +1,8 @@
 """Phone Queue: phone tickets loaded for evaluation, claimed and audited by
 reviewers or phone evaluators.
 
-- A reviewer pastes a batch of Intercom ticket links ("Load phone tickets"),
+- Weng (QUEUE_ADMIN, for now the only one who sees these tools) pastes a
+  batch of Intercom ticket links ("Load phone tickets"),
   then clicks Notify channel once to post one message for the batch to the
   phone QA Slack channel (lib/slack_notify.py).
 - Erwin or a phone evaluator claims a waiting ticket. Claiming locks it to
@@ -32,11 +33,13 @@ st.set_page_config(page_title="Phone Queue — ZEVO Quality Evaluation", page_ic
 ui.inject_style()
 
 RELEASE_ANY = "Weng Yee"  # besides the person who claimed it, who can release a claimed ticket
+QUEUE_ADMIN = "Weng Yee"  # the only one who sees Load phone tickets and Notify channel, for now
 ss = st.session_state
 
 is_reviewer = auth.is_signed_in()
 is_evaluator = evaluator_auth.is_signed_in()
 me = auth.current_reviewer() or evaluator_auth.current_name()
+is_queue_admin = auth.current_reviewer() == QUEUE_ADMIN
 
 ui.page_heading("Phone Queue")
 
@@ -151,7 +154,7 @@ def _parse_ticket_ids(raw: str) -> list[str]:
     return ids
 
 
-if is_reviewer:
+if is_queue_admin:
     with st.expander("➕ Load phone tickets", expanded=not queue):
         st.caption(
             "Paste Intercom ticket links or ticket numbers, one per line. They're added to the queue "
