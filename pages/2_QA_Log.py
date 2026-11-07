@@ -5,7 +5,7 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
-from lib import activity, agent_auth, auth, db, sheets_backup, signin_panel, signoff, team_lead_auth, ui, weeks
+from lib import activity, agent_auth, auth, db, evaluator_auth, sheets_backup, signin_panel, signoff, team_lead_auth, ui, weeks
 from lib.constants import (
     CHANNEL_OPTIONS,
     CRITICAL_ERRORS,
@@ -451,6 +451,67 @@ if auth.current_reviewer() == "Weng Yee":
                             f"Password set for {tl_pw_lead['name']} — they can now sign in on Team Lead Dashboard.",
                         )
                     st.rerun()
+
+# ---------- phone evaluators ----------
+# Weng only. Phone evaluators (e.g. a third-party evaluator with no Intercom
+# access) sign in on the Phone Queue page and can only claim and audit phone
+# tickets there. Same add / remove / set password pattern as team leads.
+if auth.current_reviewer() == "Weng Yee":
+    ev_msg = ss.pop("_ev_pw_msg", None)
+    if ev_msg:
+        (st.success if ev_msg[0] == "ok" else st.error)(ev_msg[1])
+
+    with st.expander("Manage phone evaluators"):
+        st.caption(
+            "Phone evaluators sign in on the Phone Queue page with the password you set here. "
+            "They see only the Phone Queue: they can claim a phone ticket, listen to the call, "
+            "and audit it on the phone rubric. No chat audits, no other pages."
+        )
+        st.markdown("**Add a phone evaluator**")
+        with st.form("add_evaluator_form", clear_on_submit=True):
+            new_ev_name = st.text_input("Full name")
+            ev_add_submitted = st.form_submit_button("Add phone evaluator")
+        if ev_add_submitted:
+            _new_id, err = db.create_evaluator(new_ev_name)
+            if err:
+                ss["_ev_pw_msg"] = ("error", f"Could not add {new_ev_name.strip()}: {err}")
+            else:
+                ss["_ev_pw_msg"] = ("ok", f"Added {new_ev_name.strip()}. Set a password below before they can sign in.")
+            st.rerun()
+
+        evaluators = sorted(db.list_evaluators(), key=lambda e: (e.get("name") or "").lower())
+        ev_options = ["Select an evaluator..."] + [f'{e["name"]} ({e["id"]})' for e in evaluators]
+
+        st.markdown("**Set or reset a phone evaluator's password**")
+        ev_pw_choice = st.selectbox("Phone evaluator", ev_options, key="set_ev_pw_select")
+        if ev_pw_choice != "Select an evaluator...":
+            ev_pw_person = evaluators[ev_options.index(ev_pw_choice) - 1]
+            st.caption("Already has a password set — this replaces it." if ev_pw_person.get("password_hash") else "No password set yet.")
+            ev_new_pw1 = st.text_input("New password", type="password", key="set_ev_pw_new")
+            ev_new_pw2 = st.text_input("Confirm new password", type="password", key="set_ev_pw_confirm")
+            if st.button("Set password", key="set_ev_pw_button"):
+                if not ev_new_pw1:
+                    st.error("Enter a password.")
+                elif ev_new_pw1 != ev_new_pw2:
+                    st.error("Passwords don't match.")
+                else:
+                    err = db.set_evaluator_password(ev_pw_person["id"], evaluator_auth.hash_password(ev_new_pw1))
+                    if err:
+                        ss["_ev_pw_msg"] = ("error", f"Could not set password for {ev_pw_person['name']}: {err}")
+                    else:
+                        ss["_ev_pw_msg"] = ("ok", f"Password set for {ev_pw_person['name']}. They can now sign in on the Phone Queue page.")
+                    st.rerun()
+
+        st.markdown("**Remove a phone evaluator**")
+        st.caption("Their past audits stay in the QA Log. Tickets they had claimed stay claimed under their name; release them on the Phone Queue page.")
+        rm_ev_choice = st.selectbox("Phone evaluator to remove", ev_options, key="remove_ev_select")
+        if rm_ev_choice != "Select an evaluator...":
+            rm_ev = evaluators[ev_options.index(rm_ev_choice) - 1]
+            rm_ev_confirm = st.checkbox(f"Yes, remove {rm_ev['name']}.", key="remove_ev_confirm")
+            if st.button("Remove", type="primary", disabled=not rm_ev_confirm, key="remove_ev_button"):
+                err = db.delete_evaluator(rm_ev["id"])
+                ss["_ev_pw_msg"] = ("error", f"Could not remove {rm_ev['name']}: {err}") if err else ("ok", f"Removed {rm_ev['name']}.")
+                st.rerun()
 
 # ---------- backup sheet ----------
 # Visible only to Weng — the other reviewers don't need this control, and a
