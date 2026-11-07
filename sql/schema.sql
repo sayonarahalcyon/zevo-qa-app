@@ -173,6 +173,34 @@ create table if not exists phone_queue (
 create index if not exists idx_phone_queue_claimed_by on phone_queue (claimed_by);
 create index if not exists idx_phone_queue_notified on phone_queue (notified_at);
 
+-- Calibration mode (see sql/migrations/2026_11_07b_calibration.sql).
+-- Calibration scores never go into qa_entries or any dashboard.
+create table if not exists calibration_sessions (
+    id             text primary key,          -- uuid4
+    ticket_id      text not null,             -- Intercom conversation id
+    ticket_url     text,
+    agent_name     text,                      -- assignee when the session was started
+    participants   jsonb not null default '[]'::jsonb,  -- evaluator names who score it
+    created_by     text,
+    created_at     timestamptz not null default now(),
+    closed_at      timestamptz                -- set when Weng closes the session
+);
+
+create table if not exists calibration_scores (
+    session_id       text not null references calibration_sessions (id) on delete cascade,
+    evaluator        text not null,
+    scores           jsonb not null default '{}'::jsonb,
+    remarks          jsonb not null default '{}'::jsonb,
+    critical_errors  jsonb not null default '{}'::jsonb,
+    overall_comments text,
+    total_score      integer,
+    result           text,
+    submitted_at     timestamptz not null default now(),
+    primary key (session_id, evaluator)
+);
+
+create index if not exists idx_calibration_sessions_ticket on calibration_sessions (ticket_id);
+
 create index if not exists idx_agents_team_lead on agents (team_lead_id);
 create index if not exists idx_qa_entries_agent on qa_entries (agent_name);
 create index if not exists idx_qa_entries_qa_date on qa_entries (qa_date);
