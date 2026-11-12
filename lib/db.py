@@ -703,7 +703,15 @@ def add_to_phone_queue(rows: list[dict]) -> str | None:
     if not rows:
         return None
     try:
-        db.table("phone_queue").upsert(rows, on_conflict="ticket_id", ignore_duplicates=True).execute()
+        try:
+            db.table("phone_queue").upsert(rows, on_conflict="ticket_id", ignore_duplicates=True).execute()
+        except Exception as exc:
+            # phone_queue.ticket_submitted_by comes from
+            # sql/migrations/2026_11_12c_queue_submitted_by.sql; load without it until then.
+            if "ticket_submitted_by" not in str(exc):
+                raise
+            rows = [{k: v for k, v in r.items() if k != "ticket_submitted_by"} for r in rows]
+            db.table("phone_queue").upsert(rows, on_conflict="ticket_id", ignore_duplicates=True).execute()
         list_phone_queue.clear()
         return None
     except Exception as e:
