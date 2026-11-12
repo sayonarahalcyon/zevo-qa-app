@@ -25,6 +25,8 @@ from lib.constants import (
     compute_result,
     compute_total,
     critical_errors_for,
+    phone_level_label,
+    rubric_channel,
     rubric_for,
 )
 from lib.ui import result_badge_md
@@ -115,6 +117,8 @@ def _render_summary(ticket_id: str, qa: dict, editing_key: str) -> None:
             + f"dited {len(edit_log)}x · last by {last.get('edited_by') or '—'} "
             f"on {_fmt_date(last.get('edited_at'))} ({last.get('reason', '—')}){score_note}"
         )
+    if auth.is_signed_in() or evaluator_auth.is_signed_in():
+        _render_breakdown(qa)
     if _can_edit(qa):
         if cols[3].button("Edit score", key=f"edit_{ticket_id}"):
             st.session_state[editing_key] = True
@@ -123,6 +127,45 @@ def _render_summary(ticket_id: str, qa: dict, editing_key: str) -> None:
         cols[3].caption("View only")
     else:
         cols[3].caption("Sign in to edit")
+
+
+def _render_breakdown(qa: dict) -> None:
+    """The saved audit in full, read-only: each category's score (with its
+    level name on a phone audit) and remarks, critical errors, overall
+    comments and links. Shown to reviewers and phone evaluators, so an
+    evaluator can see how someone else scored a ticket once it's submitted."""
+    channel = rubric_channel(qa)
+    scores = qa.get("scores") or {}
+    remarks = qa.get("remarks") or {}
+    with st.expander("Full breakdown", expanded=False):
+        lines = []
+        for r in rubric_for(channel):
+            v = scores.get(r["key"])
+            if v is None:
+                shown = "—"
+            elif channel == "Phone" and r.get("levels"):
+                shown = phone_level_label(r, v)
+            else:
+                shown = str(v)
+            line = f"- **{r['name']}** (max {r['max']}): {shown}"
+            if remarks.get(r["key"]):
+                line += f"  \n  _{remarks[r['key']]}_"
+            lines.append(line)
+        st.markdown("\n".join(lines))
+        crit = qa.get("critical_errors") or {}
+        flagged = [c["label"] for c in critical_errors_for(channel) if crit.get(c["key"])]
+        st.markdown("**Critical errors:** " + ("; ".join(flagged) if flagged else "None"))
+        if qa.get("overall_comments"):
+            st.markdown(f"**Overall comments:** {qa['overall_comments']}")
+        extra = []
+        if qa.get("concern_types"):
+            extra.append("Concern: " + ", ".join(qa["concern_types"]))
+        if qa.get("renter_host"):
+            extra.append(f"Renter/Host: {qa['renter_host']}")
+        if extra:
+            st.caption(" · ".join(extra))
+        if qa.get("zomp_link"):
+            st.markdown(f"**ZOMP:** [{qa['zomp_link']}]({qa['zomp_link']})")
 
 
 def _render_form(
