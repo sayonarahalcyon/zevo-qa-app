@@ -437,9 +437,13 @@ def _render_form(
         edit_reason = st.selectbox(
             "Reason for this edit",
             EDIT_REASONS,
+            index=None,
+            placeholder="Choose why",
             key=f"edit_reason_{ticket_id}",
         )
-        if edit_reason.startswith("Dispute"):
+        # Nothing is preselected, so a correction or a test-audit change is
+        # never logged as a dispute by accident.
+        if (edit_reason or "").startswith("Dispute"):
             dispute_reason = st.text_area(
                 "Dispute reason — what was disputed, and why",
                 key=f"dispute_reason_{ticket_id}",
@@ -455,6 +459,9 @@ def _render_form(
             return
         if channel == "Phone" and phone_rubric_ui.missing_levels(scores):
             st.error("Pick a level for every category: " + ", ".join(phone_rubric_ui.missing_levels(scores)) + ".")
+            return
+        if existing and not edit_reason:
+            st.error("Choose why this score is being edited.")
             return
         if existing and edit_reason.startswith("Dispute") and not dispute_reason.strip():
             st.error("Dispute reason is required when editing a score because of a dispute.")
