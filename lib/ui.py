@@ -27,6 +27,31 @@ except Exception:  # bleach not installed — fall back to plain text
         return re.sub("<[^<]+?>", " ", html)
 
 
+def html_to_markdown(html: str | None) -> str:
+    """Intercom note HTML as Markdown, for places that render Markdown but not
+    HTML (st.warning boxes): paragraphs and line breaks kept, links become
+    clickable Markdown links, every other tag dropped."""
+    import html as _html
+    import re
+
+    if not html:
+        return ""
+    t = re.sub(r"(?i)<br\s*/?>", "  \n", html)
+    t = re.sub(r"(?i)</p\s*>", "\n\n", t)
+    t = re.sub(r"(?i)</li\s*>", "\n", t)
+    t = re.sub(r"(?i)<li[^>]*>", "- ", t)
+
+    def _link(m):
+        href, text = m.group(1), re.sub(r"<[^>]+>", "", m.group(2)).strip()
+        return f"[{text or href}]({href})"
+
+    t = re.sub(r'(?is)<a\s[^>]*?href="([^"]+)"[^>]*>(.*?)</a>', _link, t)
+    t = re.sub(r"<[^>]+>", "", t)
+    t = _html.unescape(t)
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    return t.strip()
+
+
 def fmt_datetime(epoch_seconds) -> str:
     if not epoch_seconds:
         return "—"
@@ -173,7 +198,7 @@ def render_transcript(entries: list[dict]) -> None:
                 st.markdown(who_line, unsafe_allow_html=True)
                 st.markdown(body_html, unsafe_allow_html=True)
         elif e["role"] == "note":
-            st.warning(f"{who_line}\n\n{body_html}", icon="📝")
+            st.warning(f"{who_line}\n\n{html_to_markdown(e.get('body')) or '*(no message body)*'}", icon="📝")
         else:
             with st.chat_message("assistant"):
                 st.markdown(who_line, unsafe_allow_html=True)
