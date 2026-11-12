@@ -14,7 +14,7 @@ secrets, so Weng can add or reset one without a redeploy.
 
 import streamlit as st
 
-from lib import activity, db
+from lib import activity, db, persist
 from lib.agent_auth import hash_password, verify_password
 
 SESSION_KEY = "evaluator_signed_in"  # {"id": ..., "name": ...}
@@ -55,6 +55,7 @@ def render_sign_in() -> None:
         elif ev and verify_password(pw, ev.get("password_hash")):
             st.session_state[SESSION_KEY] = {"id": ev["id"], "name": ev["name"]}
             db.record_login("evaluator", ev["id"], ev["name"])
+            persist.remember("evaluator", ev["id"], ev["name"])
             activity.reset()
             st.rerun()
         else:
@@ -70,6 +71,7 @@ def render_sign_out(container=None) -> None:
     if container.button("Sign out", key="ev_auth_sign_out"):
         activity.log("sign_out", "", "evaluator")
         activity.reset()
+        persist.forget()
         st.session_state.pop(SESSION_KEY, None)
         st.rerun()
 
