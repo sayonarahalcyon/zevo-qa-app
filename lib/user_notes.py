@@ -16,7 +16,7 @@ from __future__ import annotations
 import streamlit as st
 
 from lib.intercom_client import IntercomError, list_contact_notes
-from lib.ui import fmt_datetime, sanitize_html
+from lib.ui import fmt_datetime, html_to_markdown
 
 BEFORE_SECONDS = 3600
 AFTER_SECONDS = 2 * 86400
@@ -58,7 +58,7 @@ def _contact_ids(convo: dict) -> list[str]:
 def _note_box(n: dict) -> None:
     who = (n.get("author") or {}).get("name") or "Unknown"
     st.warning(
-        f"**{who}** &nbsp;·&nbsp; {fmt_datetime(n.get('created_at'))}\n\n{sanitize_html(n.get('body')) or '*(empty note)*'}",
+        f"**{who}** &nbsp;·&nbsp; {fmt_datetime(n.get('created_at'))}\n\n{html_to_markdown(n.get('body')) or '*(empty note)*'}",
         icon="👤",
     )
 
