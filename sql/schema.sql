@@ -169,7 +169,8 @@ create table if not exists phone_queue (
     loaded_at      timestamptz not null default now(),
     notified_at    timestamptz,               -- set when "Notify channel" announced it
     claimed_by     text,
-    claimed_at     timestamptz
+    claimed_at     timestamptz,
+    ticket_submitted_by text                  -- "Sales" or "T1", optional at load; pre-fills the audit form
 );
 
 create index if not exists idx_phone_queue_claimed_by on phone_queue (claimed_by);
