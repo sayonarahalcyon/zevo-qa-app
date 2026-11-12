@@ -66,14 +66,14 @@ def render(
     can_sign_off: bool = False,
     preview_sign_off: bool = False,
 ) -> None:
+    # Test audits are left out of agents' and team leads' dashboards entirely:
+    # not counted and not listed (Weng, 2026-11-12). They stay in the QA Log.
     entries = [
         e
         for e in db.list_qa_entries()
-        if e.get("agent_id") == agent["id"] or (e.get("agent_name") or "").lower() == agent["name"].lower()
+        if (e.get("agent_id") == agent["id"] or (e.get("agent_name") or "").lower() == agent["name"].lower())
+        and not e.get("is_test")
     ]
-    # Same rule as the QA Log dashboard and Home: test audits never count
-    # toward an agent's own numbers, though they still show up (marked) in
-    # the list below.
     all_real_entries = [e for e in entries if not e.get("is_test")]
 
     if not all_real_entries:
