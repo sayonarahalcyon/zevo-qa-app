@@ -25,6 +25,7 @@ from datetime import datetime
 import streamlit as st
 
 from lib import auth, db, evaluator_auth, slack_notify, ui
+from lib.constants import TICKET_SUBMITTED_BY_OPTIONS
 from lib.intercom_client import IntercomError, conversation_url, get_call_ids, get_conversation
 from lib.ticket_view import learn_agents_from_conversation, render_ticket
 from lib.ui import result_badge_md
@@ -131,6 +132,7 @@ if open_id:
             evaluator_mode=is_evaluator and not is_reviewer,
             show_form=show_form,
             form_note=note,
+            default_submitted_by=row.get("ticket_submitted_by"),
         )
     except IntercomError as e:
         st.error(f"Could not load conversation #{open_id}: {e}")
@@ -161,6 +163,13 @@ if is_queue_admin:
             "without notifying anyone. When the batch is complete, click Notify channel below."
         )
         raw = st.text_area("Ticket links", key="pq_load_input", height=140, label_visibility="collapsed")
+        load_sb = st.selectbox(
+            "Ticket submitted by (for every ticket in this batch)",
+            ["Not set"] + TICKET_SUBMITTED_BY_OPTIONS,
+            key="pq_load_submitted_by",
+            help="Optional. It pre-fills the audit form; whoever audits the ticket can still change it there, "
+            "and must pick one before submitting if it's not set.",
+        )
         if st.button("Add to queue", key="pq_load_button", type="primary"):
             ids = _parse_ticket_ids(raw)
             already = {str(r["ticket_id"]) for r in queue}
@@ -192,6 +201,7 @@ if is_queue_admin:
                         "agent_name": agent,
                         "call_ids": call_ids,
                         "loaded_by": me,
+                        **({"ticket_submitted_by": load_sb} if load_sb in TICKET_SUBMITTED_BY_OPTIONS else {}),
                     }
                 )
             err = db.add_to_phone_queue(rows)
@@ -262,7 +272,11 @@ with t_wait:
         c = st.columns([2, 3, 2, 2, 1])
         c[0].markdown(f"**#{tid}**")
         c[1].write(r.get("agent_name") or "Unknown agent")
-        c[2].caption(f"Loaded {_fmt(r.get('loaded_at'))}" + ("" if r.get("call_ids") else " · no call found"))
+        c[2].caption(
+            f"Loaded {_fmt(r.get('loaded_at'))}"
+            + (f" · {r['ticket_submitted_by']}" if r.get("ticket_submitted_by") else "")
+            + ("" if r.get("call_ids") else " · no call found")
+        )
         if c[3].button("Claim & open", key=f"pq_claim_{tid}", type="primary", use_container_width=True):
             err = db.claim_phone_ticket(tid, me)
             if err:
