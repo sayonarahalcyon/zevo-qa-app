@@ -13,6 +13,7 @@ from lib.call_media import render_call_media
 from lib.constants import is_excluded_agent_name
 from lib.intercom_client import build_transcript, conversation_url
 from lib.qa_form import render as render_qa_form
+from lib.user_notes import render_user_notes
 from lib.ui import fmt_date_short, render_badges, render_transcript
 
 
@@ -102,6 +103,8 @@ def render_ticket(
 
     with st.expander(f"💬 Conversation ({len(transcript_entries)} messages)", expanded=False):
         render_transcript(transcript_entries)
+
+    render_user_notes(convo, evaluator_mode=evaluator_mode)
 
     seen = learn_agents_from_conversation(convo)
     if not show_form:
