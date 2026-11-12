@@ -14,6 +14,8 @@ store). Tables mirror the original collections 1:1 — see sql/schema.sql:
   phone_queue              -- phone tickets loaded for evaluation (id = Intercom conversation id)
   calibration_sessions     -- calibration: one phone ticket scored by several evaluators
   calibration_scores       -- each evaluator's calibration score (never counted in stats)
+  audit_drafts             -- autosaved, not-yet-submitted QA audit forms (one per ticket + author)
+  app_sessions             -- "stay signed in" tokens (hashed) for reviewers and phone evaluators
 """
 
 import re
@@ -885,6 +887,95 @@ def delete_calibration_session(session_id: str) -> str | None:
         return None
     except Exception as e:
         return str(e)
+
+
+# ---------- audit drafts (autosave) ----------
+# What someone has filled in on a QA audit form but not submitted yet, saved
+# as they go so a dropped session (app restart, sleep, reload) doesn't lose it.
+# See sql/migrations/2026_11_12_drafts_and_sessions.sql. Every function here
+# fails quietly (returns None/False) so the form keeps working without the table.
+
+
+def get_audit_draft(ticket_id: str, author: str) -> dict | None:
+    db = get_client()
+    if not db or not author:
+        return None
+    try:
+        res = (
+            db.table("audit_drafts").select("*").eq("ticket_id", str(ticket_id)).eq("author", author).limit(1).execute()
+        )
+        return (res.data or [None])[0]
+    except Exception:
+        return None
+
+
+def save_audit_draft(ticket_id: str, author: str, data: dict) -> bool:
+    db = get_client()
+    if not db or not author:
+        return False
+    try:
+        db.table("audit_drafts").upsert(
+            {"ticket_id": str(ticket_id), "author": author, "data": data,
+             "updated_at": datetime.now(timezone.utc).isoformat()},
+            on_conflict="ticket_id,author",
+        ).execute()
+        return True
+    except Exception:
+        return False
+
+
+def delete_audit_draft(ticket_id: str, author: str) -> None:
+    db = get_client()
+    if not db or not author:
+        return
+    try:
+        db.table("audit_drafts").delete().eq("ticket_id", str(ticket_id)).eq("author", author).execute()
+    except Exception:
+        pass
+
+
+# ---------- stay signed in ----------
+# Only a SHA-256 hash of each browser's token is stored; the token itself
+# lives in that browser's cookie (lib/persist.py).
+
+
+def create_app_session(token_hash: str, kind: str, ident: str, name: str, expires_at: str) -> bool:
+    db = get_client()
+    if not db:
+        return False
+    try:
+        db.table("app_sessions").insert(
+            {"token_hash": token_hash, "kind": kind, "ident": str(ident), "name": name, "expires_at": expires_at}
+        ).execute()
+        return True
+    except Exception:
+        return False
+
+
+def get_app_session(token_hash: str) -> dict | None:
+    db = get_client()
+    if not db or not token_hash:
+        return None
+    try:
+        res = (
+            db.table("app_sessions").select("*").eq("token_hash", token_hash)
+            .gt("expires_at", datetime.now(timezone.utc).isoformat()).limit(1).execute()
+        )
+        return (res.data or [None])[0]
+    except Exception:
+        return None
+
+
+def delete_app_session(token_hash: str) -> None:
+    db = get_client()
+    if not db or not token_hash:
+        return
+    try:
+        db.table("app_sessions").delete().eq("token_hash", token_hash).execute()
+        # tidy up long-expired rows while we're here
+        db.table("app_sessions").delete().lt("expires_at", datetime.now(timezone.utc).isoformat()).execute()
+    except Exception:
+        pass
 
 
 def clear_cache() -> None:
