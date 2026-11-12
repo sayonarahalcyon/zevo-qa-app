@@ -5,7 +5,7 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
-from lib import activity, agent_auth, auth, db, evaluator_auth, sheets_backup, signin_panel, signoff, team_lead_auth, ui, weeks
+from lib import activity, agent_auth, auth, db, evaluator_auth, phone_rubric_ui, sheets_backup, signin_panel, signoff, team_lead_auth, ui, weeks
 from lib.constants import (
     CHANNEL_OPTIONS,
     CRITICAL_ERRORS,
@@ -784,13 +784,7 @@ with st.expander('Chat critical errors (any = automatic FAIL)'):
         st.caption(c["desc"])
 
 with st.expander("Phone scoring rubric (6 categories, 100 points)"):
-    st.caption(
-        "Phone audits are scored from the call recording, not a transcript, and the call's Intercom/ZOMP "
-        "notes are checked for Documentation."
-    )
-    for r in PHONE_RUBRIC:
-        st.markdown(f"**{r['name']}** (max {r['max']})")
-        st.caption(PHONE_RUBRIC_GUIDE[r["key"]])
+    phone_rubric_ui.render_guide(nested=True)
 
 with st.expander('Phone critical errors (any = automatic FAIL)'):
     for c in PHONE_CRITICAL_ERRORS:
