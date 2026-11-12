@@ -852,6 +852,20 @@ def close_calibration_session(session_id: str, reopen: bool = False) -> str | No
         return str(e)
 
 
+def reset_calibration_scores(session_id: str) -> str | None:
+    """Clears every score in a session but keeps the session itself, so its
+    participants can score the call again."""
+    db = get_client()
+    if not db:
+        return "Database is not connected \u2014 check the Supabase URL/key in Secrets."
+    try:
+        db.table("calibration_scores").delete().eq("session_id", str(session_id)).execute()
+        list_calibration_scores.clear()
+        return None
+    except Exception as e:
+        return str(e)
+
+
 def delete_calibration_session(session_id: str) -> str | None:
     """Deletes a session and (by cascade) its scores."""
     db = get_client()
