@@ -306,9 +306,11 @@ def _render_form(
     existing_crit = (existing or {}).get("critical_errors") or {}
     crit = {}
     critical_errors = critical_errors_for(channel)
-    crit_cols = st.columns(len(critical_errors))
+    per_row = min(len(critical_errors), 4)
     for i, c in enumerate(critical_errors):
-        with crit_cols[i]:
+        if i % per_row == 0:
+            crit_cols = st.columns(per_row)
+        with crit_cols[i % per_row]:
             crit[c["key"]] = st.checkbox(
                 c["label"], value=bool(existing_crit.get(c["key"])), key=f"crit_{channel}_{c['key']}_{ticket_id}", disabled=not signed_in, help=c["desc"]
             )
