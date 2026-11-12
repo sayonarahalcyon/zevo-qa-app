@@ -11,7 +11,7 @@ import streamlit as st
 from lib import db
 from lib.call_media import render_call_media
 from lib.constants import is_excluded_agent_name
-from lib.intercom_client import build_transcript, conversation_url
+from lib.intercom_client import IntercomError, build_transcript, conversation_url, get_contact
 from lib.qa_form import render as render_qa_form
 from lib.user_notes import render_user_notes
 from lib.ui import fmt_date_short, render_badges, render_transcript
@@ -26,6 +26,23 @@ def _spam_flag_notes(transcript_entries: list[dict]) -> list[dict]:
         for e in transcript_entries
         if e.get("kind") == "msg" and e.get("is_note") and "spam" in (e.get("body") or "").lower()
     ]
+
+
+def guest_names(convo: dict) -> list[str]:
+    """The guest's name from their Intercom profile (falls back to their
+    email or phone when the profile has no name)."""
+    names = []
+    for c in ((convo.get("contacts") or {}).get("contacts") or []):
+        if not c.get("id"):
+            continue
+        try:
+            p = get_contact(c["id"])
+        except IntercomError:
+            continue
+        n = p.get("name") or p.get("email") or p.get("phone")
+        if n and n not in names:
+            names.append(n)
+    return names
 
 
 def learn_agents_from_conversation(convo: dict) -> dict:
@@ -75,6 +92,9 @@ def render_ticket(
 
     render_badges(convo, is_reviewed)
     st.header(title)
+    guest = guest_names(convo)
+    if guest:
+        st.markdown(f"**Guest:** {', '.join(guest)}")
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Ticket", f"#{ticket_id}")
