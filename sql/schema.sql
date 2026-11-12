@@ -193,6 +193,7 @@ create table if not exists calibration_scores (
     remarks          jsonb not null default '{}'::jsonb,
     critical_errors  jsonb not null default '{}'::jsonb,
     overall_comments text,
+    zomp_link        text,                                 -- the ZOMP link this participant checked
     total_score      integer,
     result           text,
     submitted_at     timestamptz not null default now(),
