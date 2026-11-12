@@ -175,6 +175,9 @@ def _render_form(
     header_cols = st.columns([4, 1])
     header_cols[0].subheader("QA Audit" + (" — editing" if existing else ""))
     if existing and header_cols[1].button("Cancel", key=f"cancel_{ticket_id}"):
+        # Cancelling an edit also throws away its autosaved draft.
+        db.delete_audit_draft(ticket_id, _auditor_name())
+        _forget_form(ticket_id)
         st.session_state[editing_key] = False
         st.rerun()
 
@@ -183,8 +186,23 @@ def _render_form(
     if not signed_in:
         st.info('Sign in as Erwin, Weng, or Kristine in the sidebar to submit or edit a QA audit.')
 
+    # Autosave: an unsubmitted draft of this form (saved as the person fills it
+    # in) pre-fills it, so a dropped session doesn't lose their work. `seed`
+    # is where every field's starting value comes from: the saved audit, with
+    # the draft on top.
+    author = _auditor_name() if signed_in else None
+    draft = _load_draft(ticket_id, author)
+    seed = {**(existing or {}), **((draft or {}).get("data") or {})}
+    if draft:
+        dc1, dc2 = st.columns([4, 1])
+        dc1.info(f"Restored your unsaved draft from {_fmt_draft_time(draft.get('updated_at'))}. Submit to save it as an audit.")
+        if dc2.button("Discard draft", key=f"discard_draft_{ticket_id}"):
+            db.delete_audit_draft(ticket_id, author)
+            _forget_form(ticket_id)
+            st.rerun()
+
     agent_roster = _agent_options()
-    default_agent = (existing or {}).get("agent_name") or guessed_agent_name or ""
+    default_agent = seed.get("agent_name") or guessed_agent_name or ""
 
     c1, c2 = st.columns(2)
     with c1:
@@ -198,7 +216,7 @@ def _render_form(
     with c2:
         qa_date = st.date_input(
             "QA Date",
-            value=_parse_date((existing or {}).get("qa_date")) or date.today(),
+            value=_parse_date(seed.get("qa_date")) or date.today(),
             key=f"date_{ticket_id}",
             disabled=not signed_in,
         )
@@ -228,7 +246,7 @@ def _render_form(
             channel = st.selectbox(
                 "Channel",
                 CHANNEL_OPTIONS,
-                index=_safe_index(CHANNEL_OPTIONS, (existing or {}).get("channel") or "Chat"),
+                index=_safe_index(CHANNEL_OPTIONS, seed.get("channel") or "Chat"),
                 key=f"channel_{ticket_id}",
                 help="Which support channel this audit came from. It decides which scoring rubric is used, shows as a tag, and is filterable in the Audit log.",
                 disabled=not signed_in,
@@ -238,7 +256,7 @@ def _render_form(
         if channel == "Phone":
             recording_link = st.text_input(
                 "Call recording link",
-                value=(existing or {}).get("recording_link") or "",
+                value=seed.get("recording_link") or "",
                 key=f"recording_{ticket_id}",
                 help="Optional. The recording also plays above, from Intercom, for anyone signed in to this app. Phone audits are scored from the recording, not a transcript, because tone, pace and silence do not show in writing.",
                 disabled=not signed_in,
@@ -246,18 +264,18 @@ def _render_form(
     rubric = rubric_for(channel)
 
     ticket_link = st.text_input(
-        "Ticket Link", value=(existing or {}).get("ticket_link") or ticket_url, key=f"link_{ticket_id}", disabled=not signed_in
+        "Ticket Link", value=seed.get("ticket_link") or ticket_url, key=f"link_{ticket_id}", disabled=not signed_in
     )
     c3, c4 = st.columns(2)
     with c3:
         zomp_link = st.text_input(
-            "ZOMP Link", value=(existing or {}).get("zomp_link") or "", key=f"zomp_{ticket_id}", disabled=not signed_in
+            "ZOMP Link", value=seed.get("zomp_link") or "", key=f"zomp_{ticket_id}", disabled=not signed_in
         )
     with c4:
         renter_host = st.selectbox(
             "Renter / Host",
             RENTER_HOST_OPTIONS,
-            index=_safe_index(RENTER_HOST_OPTIONS, (existing or {}).get("renter_host")),
+            index=_safe_index(RENTER_HOST_OPTIONS, seed.get("renter_host")),
             key=f"rh_{ticket_id}",
             disabled=not signed_in,
         )
@@ -265,7 +283,7 @@ def _render_form(
     concern_types = st.multiselect(
         "Concern Type (select all that apply)",
         CONCERN_TYPES,
-        default=(existing or {}).get("concern_types") or [],
+        default=[c for c in (seed.get("concern_types") or []) if c in CONCERN_TYPES],
         key=f"concern_{ticket_id}",
         disabled=not signed_in,
     )
@@ -277,8 +295,8 @@ def _render_form(
         )
     scores = {}
     remarks = {}
-    existing_scores = (existing or {}).get("scores") or {}
-    existing_remarks = (existing or {}).get("remarks") or {}
+    existing_scores = seed.get("scores") or {}
+    existing_remarks = seed.get("remarks") or {}
     for r in rubric:
         if channel == "Phone":
             # Phone: the guide's fixed levels, each with its description, and the
@@ -342,13 +360,13 @@ def _render_form(
 
     overall_comments = st.text_area(
         "Overall Comments / Remarks",
-        value=(existing or {}).get("overall_comments") or "",
+        value=seed.get("overall_comments") or "",
         key=f"comments_{ticket_id}",
         disabled=not signed_in,
     )
 
     st.markdown("**Critical Errors** (any \"Yes\" = automatic FAIL)")
-    existing_crit = (existing or {}).get("critical_errors") or {}
+    existing_crit = seed.get("critical_errors") or {}
     crit = {}
     critical_errors = critical_errors_for(channel)
     per_row = min(len(critical_errors), 4)
@@ -367,6 +385,26 @@ def _render_form(
     if not signed_in:
         st.caption("Only Erwin, Weng, and Kristine can save changes here — everyone else can view read-only.")
         return
+
+    _autosave(
+        ticket_id,
+        author,
+        {
+            "agent_name": agent_name,
+            "qa_date": qa_date.isoformat() if qa_date else None,
+            "channel": channel,
+            "recording_link": recording_link,
+            "ticket_link": ticket_link,
+            "zomp_link": zomp_link,
+            "renter_host": renter_host,
+            "concern_types": concern_types,
+            "scores": scores,
+            "remarks": remarks,
+            "overall_comments": overall_comments,
+            "critical_errors": crit,
+        },
+        restored=bool(draft),
+    )
 
     if is_reviewer:
         tc1, tc2 = st.columns(2)
@@ -476,6 +514,8 @@ def _render_form(
             entry["recording_link"] = recording_link.strip()
         try:
             db.save_qa_entry(ticket_id, entry)
+            db.delete_audit_draft(ticket_id, author)
+            _forget_form(ticket_id, keep_widgets=True)
             db.clear_cache()
             sheets_backup.backup_qa_entry(ticket_id, entry)
             st.session_state[editing_key] = False
@@ -483,6 +523,55 @@ def _render_form(
             st.rerun()
         except Exception as e:
             st.error(f"Could not save — {e}")
+
+
+def _load_draft(ticket_id: str, author: str | None) -> dict | None:
+    """This person's saved draft for this ticket, read once per session (the
+    form's own widget state takes over after that)."""
+    if not author:
+        return None
+    key = f"_draft_row_{ticket_id}"
+    if key not in st.session_state:
+        st.session_state[key] = db.get_audit_draft(ticket_id, author)
+    return st.session_state[key]
+
+
+def _autosave(ticket_id: str, author: str | None, data: dict, restored: bool) -> None:
+    """Saves the form as a draft whenever it differs from what it was when
+    first opened (or from the last save). Opening a ticket and looking around
+    saves nothing."""
+    if not author:
+        return
+    ss = st.session_state
+    base_key, last_key = f"_draft_base_{ticket_id}", f"_draft_last_{ticket_id}"
+    if base_key not in ss:
+        ss[base_key] = None if restored else data
+        ss[last_key] = data if restored else None
+        return
+    if data == ss[base_key] or data == ss[last_key]:
+        return
+    if db.save_audit_draft(ticket_id, author, data):
+        ss[last_key] = data
+
+
+def _forget_form(ticket_id: str, keep_widgets: bool = False) -> None:
+    """Drops this ticket's draft bookkeeping (and, unless keep_widgets, the
+    form's widget values, so the form redraws from the saved audit)."""
+    ss = st.session_state
+    for k in [k for k in list(ss.keys()) if isinstance(k, str) and k.endswith(f"_{ticket_id}")]:
+        if k.startswith(("_draft_",)) or not keep_widgets:
+            if k.startswith(("qa_editing_",)):
+                continue
+            ss.pop(k, None)
+
+
+def _fmt_draft_time(iso_value) -> str:
+    if not iso_value:
+        return "earlier"
+    try:
+        return datetime.fromisoformat(str(iso_value).replace("Z", "+00:00")).strftime("%b %d, %Y %H:%M UTC")
+    except Exception:
+        return str(iso_value)[:16]
 
 
 def _parse_date(value):
