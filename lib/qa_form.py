@@ -71,6 +71,7 @@ def render(
     guessed_agent_name: str,
     default_escalated: bool = False,
     force_phone: bool = False,
+    default_submitted_by: str | None = None,
 ) -> None:
     """force_phone: the ticket came from the Phone Queue, so the form is locked
     to the phone rubric for everyone. A signed-in phone evaluator always gets
@@ -84,7 +85,10 @@ def render(
         _render_summary(ticket_id, existing, editing_key)
         return
 
-    _render_form(ticket_id, convo, ticket_url, guessed_agent_name, existing, editing_key, default_escalated, phone_only)
+    _render_form(
+        ticket_id, convo, ticket_url, guessed_agent_name, existing, editing_key, default_escalated, phone_only,
+        default_submitted_by,
+    )
 
 
 def _render_summary(ticket_id: str, qa: dict, editing_key: str) -> None:
@@ -172,7 +176,8 @@ def _render_breakdown(qa: dict) -> None:
 
 
 def _render_form(
-    ticket_id, convo, ticket_url, guessed_agent_name, existing, editing_key, default_escalated: bool = False, phone_only: bool = False
+    ticket_id, convo, ticket_url, guessed_agent_name, existing, editing_key, default_escalated: bool = False, phone_only: bool = False,
+    default_submitted_by: str | None = None,
 ) -> None:
     st.divider()
     header_cols = st.columns([4, 1])
@@ -284,14 +289,15 @@ def _render_form(
         )
     ticket_submitted_by = None
     if channel == "Phone":
+        # Pre-filled from the audit/draft, else from what Weng set when loading
+        # the ticket into the Phone Queue; anyone auditing can change it.
+        sb_start = seed.get("ticket_submitted_by") or default_submitted_by
         sb_col, _ = st.columns(2)
         with sb_col:
             ticket_submitted_by = st.selectbox(
                 "Ticket submitted by",
                 TICKET_SUBMITTED_BY_OPTIONS,
-                index=_safe_index(TICKET_SUBMITTED_BY_OPTIONS, seed.get("ticket_submitted_by"))
-                if seed.get("ticket_submitted_by") in TICKET_SUBMITTED_BY_OPTIONS
-                else None,
+                index=TICKET_SUBMITTED_BY_OPTIONS.index(sb_start) if sb_start in TICKET_SUBMITTED_BY_OPTIONS else None,
                 placeholder="Sales or T1",
                 key=f"submitted_by_{ticket_id}",
                 help="Which team submitted this phone ticket for evaluation. Required.",
