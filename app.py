@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 
 import streamlit as st
 
-from lib import agent_auth, auth, evaluator_auth, team_lead_auth
+from lib import agent_auth, auth, evaluator_auth, persist, team_lead_auth
 
 home = st.Page("pages/0_Home.py", title="Home", icon="🏠", default=True)
 weekly = st.Page("pages/1_Weekly_QA_Batch.py", title="Weekly QA Batch", icon="📅")
@@ -64,6 +64,10 @@ def dashboard_only_pages(file: str, title: str, icon: str, url_path: str) -> lis
 # The other pages simply aren't registered for them, so they can't be opened
 # from the sidebar. A person who is also signed in as a reviewer (Kristine is
 # both) keeps the full list, since the reviewer pages are theirs to use.
+# Reviewers and phone evaluators stay signed in across a reload or a dropped
+# connection (cookie + app_sessions, see lib/persist.py).
+persist.restore()
+
 st.session_state["app_entry_ran"] = True  # lets the dashboard pages tell they were opened through this file
 
 all_pages = [home, weekly, phone_queue, calibration, qa_log, questions_disputes, historical, my_dashboard, team_lead_dashboard]
@@ -113,6 +117,8 @@ elif team_lead_auth.is_signed_in() or agent_auth.is_signed_in():
     pages = [st.Page(f, title=t, icon=i, default=(n == 0)) for n, (f, t, i) in enumerate(signed_in)]
 else:
     pages = all_pages
+
+persist.flush_cookie()
 
 try:
     pg = st.navigation(pages, **kwargs)
