@@ -23,13 +23,14 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-from lib import auth, db, evaluator_auth, ui
+from lib import auth, db, evaluator_auth, phone_rubric_ui, ui
 from lib.constants import (
     PHONE_RUBRIC_GUIDE,
     REVIEWER_NAMES,
     compute_result,
     compute_total,
     critical_errors_for,
+    phone_level_label,
     rubric_for,
 )
 from lib.intercom_client import IntercomError, conversation_url, get_call_ids, get_conversation
@@ -109,17 +110,10 @@ if msg:
 
 
 def _scoring_guide(expanded: bool = False) -> None:
-    """The phone rubric, critical errors and result thresholds, same wording as
-    QA Log's Scoring guide, so everyone calibrates against the same standard."""
+    """The phone scoring guide (fixed levels, descriptions, Critical Notes) and
+    the result thresholds, same wording as QA Log's Scoring guide."""
     st.subheader("Phone scoring guide")
-    with st.expander("Phone scoring rubric (6 categories, 100 points)", expanded=expanded):
-        st.caption(
-            "Phone audits are scored from the call recording, not a transcript, and the call's Intercom/ZOMP "
-            "notes are checked for Documentation. Each category takes a whole number from 0 to its maximum."
-        )
-        for r in RUBRIC:
-            st.markdown(f"**{r['name']}** (max {r['max']})")
-            st.caption(PHONE_RUBRIC_GUIDE.get(r["key"], ""))
+    phone_rubric_ui.render_guide(expanded=expanded)
     with st.expander("Phone critical errors (any = automatic FAIL)", expanded=expanded):
         for c in CRITICAL:
             st.markdown(f"**{c['label']}**")
@@ -141,9 +135,10 @@ def _comparison(session: dict, scores: dict) -> None:
     rows = []
     for r in RUBRIC:
         vals = [int((scores[p].get("scores") or {}).get(r["key"], 0) or 0) for p in people]
-        rows.append({"Category": f"{r['name']} (max {r['max']})", **dict(zip(people, vals)), "Spread": max(vals) - min(vals)})
+        shown = [phone_level_label(r, v) for v in vals]
+        rows.append({"Category": f"{r['name']} (max {r['max']})", **dict(zip(people, shown)), "Spread": max(vals) - min(vals)})
     totals = [int(scores[p].get("total_score") or 0) for p in people]
-    rows.append({"Category": "Total (out of 100)", **dict(zip(people, totals)), "Spread": max(totals) - min(totals)})
+    rows.append({"Category": "Total (out of 100)", **dict(zip(people, [str(t) for t in totals])), "Spread": max(totals) - min(totals)})
     table = pd.DataFrame(rows).set_index("Category")
     st.dataframe(table, use_container_width=True)
 
@@ -189,23 +184,14 @@ def _score_form(session: dict, existing: dict | None, locked: bool) -> None:
     ex_crit = (existing or {}).get("critical_errors") or {}
     scores, remarks = {}, {}
     for r in RUBRIC:
-        c1, c2 = st.columns([1, 2])
-        with c1:
-            st.caption(f"{r['name']} (max {r['max']})")
-            try:
-                start = min(max(int(ex_scores.get(r["key"], 0)), 0), r["max"])
-            except (TypeError, ValueError):
-                start = 0
-            scores[r["key"]] = st.number_input(
-                r["key"], min_value=0, max_value=r["max"], value=start, step=1,
-                key=f"cal_{sid}_{r['key']}", disabled=locked, label_visibility="collapsed",
-                help=PHONE_RUBRIC_GUIDE.get(r["key"]),
-            )
-        with c2:
-            remarks[r["key"]] = st.text_input(
-                f"Remarks — {r['name']}", value=ex_remarks.get(r["key"], ""), key=f"cal_rem_{sid}_{r['key']}",
-                disabled=locked, label_visibility="collapsed", placeholder="Remarks (optional)",
-            )
+        st.markdown(f"**{r['name']}** ({r['max']} points)")
+        scores[r["key"]] = phone_rubric_ui.level_picker(
+            r, key=f"cal_{sid}_{r['key']}", current=ex_scores.get(r["key"]), disabled=locked
+        )
+        remarks[r["key"]] = st.text_input(
+            f"Remarks — {r['name']}", value=ex_remarks.get(r["key"], ""), key=f"cal_rem_{sid}_{r['key']}",
+            disabled=locked, label_visibility="collapsed", placeholder="Remarks (optional)",
+        )
     overall = st.text_area("Overall comments", value=(existing or {}).get("overall_comments") or "", key=f"cal_overall_{sid}", disabled=locked)
     st.markdown('**Critical errors** (any "Yes" = automatic FAIL)')
     crit = {}
@@ -219,6 +205,10 @@ def _score_form(session: dict, existing: dict | None, locked: bool) -> None:
     if locked:
         return
     if st.button("Update my score" if existing else "Submit my score", key=f"cal_submit_{sid}", type="primary"):
+        missing = phone_rubric_ui.missing_levels(scores)
+        if missing:
+            st.error("Pick a level for every category: " + ", ".join(missing) + ".")
+            return
         err = db.save_calibration_score(
             sid,
             me,
@@ -290,10 +280,17 @@ if open_id:
 
     if is_admin:
         st.divider()
-        a1, a2, _ = st.columns([1, 1, 3])
+        a1, a3, a2, _ = st.columns([1, 1, 1, 2])
         if a1.button("Reopen session" if closed else "Close session", key=f"cal_close_{session['id']}"):
             err = db.close_calibration_session(session["id"], reopen=closed)
             _flash("error", err) if err else _flash("ok", "Session reopened." if closed else "Session closed.")
+            st.rerun()
+        # Clears everyone's scores but keeps the session, so the same people can
+        # score the call again (e.g. after the scoring guide changed).
+        reset_ok = a3.checkbox("Confirm reset", key=f"cal_reset_confirm_{session['id']}")
+        if a3.button("Reset all scores", key=f"cal_reset_{session['id']}", disabled=not reset_ok or not scores):
+            err = db.reset_calibration_scores(session["id"])
+            _flash("error", err) if err else _flash("ok", "All scores cleared. Everyone in the session can score it again.")
             st.rerun()
         confirm = a2.checkbox("Confirm delete", key=f"cal_del_confirm_{session['id']}")
         if a2.button("Delete session", key=f"cal_del_{session['id']}", disabled=not confirm):
