@@ -87,15 +87,12 @@ elif evaluator_auth.is_signed_in():
         )
 elif opened_from_link(EVALUATOR_LINK_PATH):
     # The phone evaluators' own link: only their sign-in page, no sidebar.
-    pages = [
-        st.Page(
-            "pages/9_Phone_Evaluator_Sign_In.py",
-            title="Phone Evaluator Sign-in",
-            icon="📞",
-            url_path=EVALUATOR_LINK_PATH,
-            default=True,
-        )
-    ]
+    # (Same shape as the dashboard links: a default page that forwards to the
+    # sign-in page, because a default page always lives at "/" and would not
+    # match the .../Phone_Evaluator address.)
+    pages = dashboard_only_pages(
+        "pages/9_Phone_Evaluator_Sign_In.py", "Phone Evaluator Sign-in", "📞", EVALUATOR_LINK_PATH
+    )
     kwargs = {"position": "hidden"}
 elif opened_from_link(TEAM_LEAD_LINK_PATH):
     pages = dashboard_only_pages(
