@@ -119,6 +119,8 @@ def _render_summary(ticket_id: str, qa: dict, editing_key: str) -> None:
         if cols[3].button("Edit score", key=f"edit_{ticket_id}"):
             st.session_state[editing_key] = True
             st.rerun()
+    elif evaluator_auth.is_signed_in():
+        cols[3].caption("View only")
     else:
         cols[3].caption("Sign in to edit")
 
