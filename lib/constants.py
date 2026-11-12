@@ -69,6 +69,10 @@ CONCERN_TYPES = [
 
 RENTER_HOST_OPTIONS = ["", "Renter", "Host", "Other Entity"]
 
+# Phone audits only: which team submitted the phone ticket for evaluation.
+# Required on the phone audit form (Weng, 2026-11-12).
+TICKET_SUBMITTED_BY_OPTIONS = ["Sales", "T1"]
+
 # Which support channel a QA audit came from. "Chat" covers every audit
 # logged before phone QA existed (all sourced from Intercom conversations);
 # "Phone" audits are scored on the separate phone rubric below. Both use the
