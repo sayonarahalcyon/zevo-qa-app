@@ -29,8 +29,9 @@ def _spam_flag_notes(transcript_entries: list[dict]) -> list[dict]:
 
 
 def guest_names(convo: dict) -> list[str]:
-    """The guest's name from their Intercom profile (falls back to their
-    email or phone when the profile has no name)."""
+    """The guest's name and email from their Intercom profile, e.g.
+    "James Kuminecz · james@example.com" (just whichever exists if one is
+    missing, or the phone number if neither is)."""
     names = []
     for c in ((convo.get("contacts") or {}).get("contacts") or []):
         if not c.get("id"):
@@ -39,7 +40,11 @@ def guest_names(convo: dict) -> list[str]:
             p = get_contact(c["id"])
         except IntercomError:
             continue
-        n = p.get("name") or p.get("email") or p.get("phone")
+        name, email = p.get("name"), p.get("email")
+        if name and email:
+            n = f"{name} · {email}"
+        else:
+            n = name or email or p.get("phone")
         if n and n not in names:
             names.append(n)
     return names
