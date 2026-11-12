@@ -195,9 +195,11 @@ def _score_form(session: dict, existing: dict | None, locked: bool) -> None:
     overall = st.text_area("Overall comments", value=(existing or {}).get("overall_comments") or "", key=f"cal_overall_{sid}", disabled=locked)
     st.markdown('**Critical errors** (any "Yes" = automatic FAIL)')
     crit = {}
-    cols = st.columns(len(CRITICAL))
+    per_row = min(len(CRITICAL), 4)
     for i, c in enumerate(CRITICAL):
-        with cols[i]:
+        if i % per_row == 0:
+            cols = st.columns(per_row)
+        with cols[i % per_row]:
             crit[c["key"]] = st.checkbox(c["label"], value=bool(ex_crit.get(c["key"])), key=f"cal_crit_{sid}_{c['key']}", disabled=locked, help=c["desc"])
     total = compute_total(scores, "Phone")
     result = compute_result(total, crit, "Phone")
