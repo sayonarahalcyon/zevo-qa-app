@@ -75,6 +75,7 @@ def render_ticket(
     evaluator_mode: bool = False,
     show_form: bool = True,
     form_note: str = "",
+    default_submitted_by: str | None = None,
 ) -> None:
     """force_phone: the ticket came from the Phone Queue, so the audit form is
     locked to the phone rubric. evaluator_mode: a phone evaluator (no Intercom
@@ -143,4 +144,5 @@ def render_ticket(
         guessed_agent,
         default_escalated=default_escalated,
         force_phone=force_phone,
+        default_submitted_by=default_submitted_by,
     )
