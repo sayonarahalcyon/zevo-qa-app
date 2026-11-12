@@ -70,6 +70,7 @@ HEADER = [
     "Channel",
     "Recording Link",
     *PHONE_RUBRIC_HEADERS,
+    "Ticket Submitted By",
 ]
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -169,6 +170,7 @@ def _entry_to_row(ticket_id: str, entry: dict) -> list:
                 (entry_scores.get(r["key"], ""), entry_remarks.get(r["key"], "")) if is_phone else ("", "")
             )
         ],
+        entry.get("ticket_submitted_by") or "",
     ]
 
 
