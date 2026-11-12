@@ -289,8 +289,10 @@ def save_qa_entry(ticket_id: str, entry: dict) -> None:
         # (sql/migrations/2026_10_19_add_recording_link.sql). If the app is
         # updated before that has been run, still save the audit itself instead
         # of failing; the link is simply not stored until the column exists.
-        if "recording_link" in row and "recording_link" in str(exc):
-            row.pop("recording_link")
+        optional = [c for c in ("recording_link", "ticket_submitted_by") if c in row and c in str(exc)]
+        if optional:
+            for c in optional:
+                row.pop(c)
             db.table("qa_entries").upsert(row).execute()
         else:
             raise
