@@ -116,9 +116,9 @@ if open_id:
     elif status == "waiting":
         show_form = False
         note = "Claim this ticket in the queue to audit it."
-    elif status == "audited" and not is_reviewer and (entry or {}).get("qa_reviewer") != me:
-        show_form = False
-        note = f"Already audited by {(entry or {}).get('qa_reviewer') or 'someone else'}."
+    # An audited ticket can be opened by any evaluator once the audit is
+    # submitted: the audit shows read-only (only its author or a reviewer can
+    # edit it). A ticket someone else has claimed stays closed until then.
 
     try:
         with st.spinner(f"Loading conversation #{open_id}…"):
@@ -312,6 +312,6 @@ with t_done:
             unsafe_allow_html=True,
         )
         c[3].caption(f"{e.get('qa_reviewer') or '—'} · {e.get('qa_date') or ''}")
-        if (is_reviewer or e.get("qa_reviewer") == me) and c[4].button("Open", key=f"pq_done_open_{tid}"):
+        if c[4].button("Open" if (is_reviewer or e.get("qa_reviewer") == me) else "View", key=f"pq_done_open_{tid}"):
             ss["pq_open_ticket"] = tid
             st.rerun()
