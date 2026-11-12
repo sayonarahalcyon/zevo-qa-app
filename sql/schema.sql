@@ -87,6 +87,8 @@ create table if not exists qa_entries (
                                                               -- Audit log filter
     recording_link         text,                              -- phone audits only: link to the call recording
                                                               -- the audit was scored from
+    ticket_submitted_by    text,                              -- phone audits only: "Sales" or "T1", the team that
+                                                              -- submitted the phone ticket for evaluation
     created_at             timestamptz not null default now(),
     updated_at             timestamptz not null default now()
 );
