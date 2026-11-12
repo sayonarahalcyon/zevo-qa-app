@@ -246,14 +246,16 @@ CRITICAL_ERRORS = [
 # external QA Audit Question & Dispute Form's category checkboxes.
 DISPUTE_CATEGORIES = [r["name"] for r in RUBRIC] + ["Critical Error"]
 
-# The five phone critical errors (any one is an AUTO FAIL). "refund" and
+# The seven phone critical errors (any one is an AUTO FAIL). "refund" and
 # "safety" reuse the chat keys, since they are the same kind of mistake, so
 # reports that count critical errors by key stay consistent across channels.
 # The wording is the phone framework's: "refund" is broader (any credit or
 # exception, not only a refund) and "safety" is about giving incorrect
 # guidance. "verification", "hangup" and "conduct" are phone-only. The chat
 # flags "access" (allowed access during a dispute) and "policy" (wrong policy
-# given) are not on the phone list.
+# given) are not on the phone list. "unconfirmed_outcome" and
+# "inaccurate_notes" come from the Resolution & Closing and Documentation
+# Critical Notes in the Suggested Scoring Guide (added 2026-11-12).
 PHONE_CRITICAL_ERRORS = [
     {
         "key": "verification",
@@ -279,6 +281,16 @@ PHONE_CRITICAL_ERRORS = [
         "key": "refund",
         "label": "Promised a refund, credit, or exception they are not authorized to give",
         "desc": "Refunds, credits and exceptions may only be offered when the agent is authorized to give them.",
+    },
+    {
+        "key": "unconfirmed_outcome",
+        "label": "Guaranteed an outcome that was not yet confirmed",
+        "desc": "Agent guaranteed or confirmed a specific resolution or outcome while the matter was still pending escalation, approval, or guidance and the outcome had not actually been confirmed.",
+    },
+    {
+        "key": "inaccurate_notes",
+        "label": "Materially inaccurate documentation",
+        "desc": "The notes state that a significant action, statement, approval, or event occurred when it did not occur on the call or in the documented handling.",
     },
 ]
 
