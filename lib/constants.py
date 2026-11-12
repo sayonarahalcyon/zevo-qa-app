@@ -115,25 +115,97 @@ RUBRIC_GUIDE = {
 # on phone, and are what tells a phone audit's scores apart from a chat one.
 # ---------------------------------------------------------------------------
 PHONE_RUBRIC = [
-    {"key": "opening", "name": "Opening & Verification", "max": 10},
-    {"key": "listening", "name": "Acknowledge & Listen", "max": 10},
-    {"key": "call_control", "name": "Communication & Call Control", "max": 15},
-    {"key": "policy", "name": "Policy Accuracy, Process Compliance, Risk & Safety", "max": 30},
-    {"key": "resolution", "name": "Resolution & Closing", "max": 20},
-    {"key": "documentation", "name": "Documentation", "max": 15},
+    {
+        "key": "opening",
+        "name": "Opening & Verification",
+        "max": 10,
+        "options": [0, 5, 10],
+        "levels": {
+            10: ("Full", "Identifies ZEVO Customer Care, states the agent's name, and addresses/confirms the guest by name. When discussing account-specific/protected information or taking an account action, completes required identity verification before proceeding."),
+            5: ("Partial", "Required opening elements are partially completed, or the agent unnecessarily asks the guest to repeat callback details already available in the handoff. Required verification must still be completed before account-specific/protected handling."),
+            0: ("Miss", "Required opening elements are materially missed, or required verification is not completed before account-specific/protected information is discussed or an account action is taken."),
+        },
+        "critical_note": "Do not deduct for lack of identity verification when the concern is purely generic and can be answered without accessing/discussing the guest's account. Verification is still good practice when appropriate. If protected account details are disclosed or account changes are made without required verification, treat as Critical Error / Auto Fail.",
+    },
+    {
+        "key": "listening",
+        "name": "Acknowledge & Listen",
+        "max": 10,
+        "options": [0, 5, 10],
+        "levels": {
+            10: ("Full", "Allows the guest to explain without unnecessary interruption, understands the concern, asks relevant clarifying questions when needed, and shows appropriate empathy/acknowledgment."),
+            5: ("Partial", "Understands the main concern and provides acknowledgment, but one element is incomplete or inconsistent without materially affecting the handling."),
+            0: ("Miss", "Does not demonstrate active listening or acknowledgment; repeatedly interrupts, materially misunderstands the concern, or fails to clarify information needed to proceed."),
+        },
+        "critical_note": "Ordinary conversational overlap should not be treated as critical. Repeated/excessive interruption that becomes dismissive, disrespectful, or borderline rude can be evaluated under the applicable professionalism standard.",
+    },
+    {
+        "key": "call_control",
+        "name": "Communication & Call Control",
+        "max": 15,
+        "options": [5, 10, 15],
+        "levels": {
+            15: ("Full", "Clear, professional, confident, and appropriately paced; avoids excessive filler, keeps the call focused, explains holds when needed, and manages expectations appropriately."),
+            10: ("Partial", "Generally clear and professional with minor call-control issues that do not materially affect the guest experience."),
+            5: ("Lowest", "Communication or call control is noticeably weak and affects clarity or the guest experience, but does not meet a Critical Error condition."),
+        },
+        "critical_note": "Hanging up on the guest without notice may be treated as a Critical Error. If a call drops or handling is affected by a technical issue, there should be an IT ticket, escalation, or appropriate note/documentation to support what happened.",
+    },
+    {
+        "key": "policy",
+        "name": "Policy Accuracy, Process Compliance, Risk & Safety",
+        "max": 30,
+        "options": [10, 20, 30],
+        "levels": {
+            30: ("Full", "Provides accurate policy/process guidance, follows required workflows and escalation paths, and handles safety/risk concerns correctly. Any action outside documented/known guidelines is supported by approval or guidance from Operations or a lead and is documented in the notes."),
+            20: ("Partial", "Core guidance and outcome are correct, but there is a non-critical process omission or incomplete explanation that does not create material policy, financial, or safety risk."),
+            10: ("Lowest", "Material policy/process miss or inaccurate/incomplete guidance with meaningful impact, but it does not meet a defined Critical Error condition."),
+        },
+        "critical_note": "Do not score an agent down for an action outside a known/documented policy when valid guidance/approval was received from Operations or a lead and that guidance is documented. Incorrect safety guidance or an unauthorized action/exception without required approval may be treated as a Critical Error.",
+    },
+    {
+        "key": "resolution",
+        "name": "Resolution & Closing",
+        "max": 20,
+        "options": [5, 15, 20],
+        "levels": {
+            20: ("Full", "Resolves the concern where possible or provides clear, realistic next steps with ownership and appropriate expectations. Recaps the outcome when multiple account actions were taken or when two unrelated concerns were raised, and checks whether anything else is needed before ending the call."),
+            15: ("Partial", "The main concern is substantially handled and the next step is clear, but there is a minor closing/resolution omission that does not materially affect the outcome. A recap is not required for a simple single-concern/single-action call."),
+            5: ("Lowest", "The concern is not fully resolved and the resolution path, ownership, or next step is materially unclear/incomplete, but the agent does not make an unsupported guarantee about the outcome."),
+        },
+        "critical_note": "Treat as a Critical Error when the agent guarantees/confirms a specific resolution or outcome while the matter is still pending escalation, approval, or guidance and the outcome has not actually been confirmed.",
+    },
+    {
+        "key": "documentation",
+        "name": "Documentation",
+        "max": 15,
+        "options": [5, 10, 15],
+        "levels": {
+            15: ("Full", "Post-call notes are complete, accurate, concise, and easy for the next agent to understand. Notes include the reason for the call, key facts/actions, outcome, commitments, and relevant next steps. Intercom links and relevant resources are added, and team assignment/status is updated whenever necessary."),
+            10: ("Partial", "Notes capture the core call and outcome but miss a useful non-critical detail, link/resource, or necessary team assignment/status update, or could be clearer for the next agent."),
+            5: ("Lowest", "Documentation is materially incomplete or unclear and omits key information needed to understand the call/outcome, but it does not falsely document an event or action."),
+        },
+        "critical_note": "Treat materially inaccurate documentation as a Critical Error when the notes state that a significant action, statement, approval, or event occurred when it did not occur on the call or in the documented handling.",
+    },
 ]
-# Phone categories have no fixed levels: the reviewer enters a whole number from
-# 0 to the category's points, as written in the Phone Support QA Evaluation
-# Framework (Sep 23, 2026). The text below is that framework's "what the
-# evaluator listens for" column.
+# Phone categories use the fixed levels of the "Suggested Scoring Guide" (Phone
+# Scoring Proposal 1, adopted by Weng 2026-11-12), which replaced the open
+# 0-to-max number entry of the Sep 23 framework. Each category's "levels" are
+# the guide's Full / Partial / Lowest-or-Miss descriptions word for word, and
+# "critical_note" is that category's Critical Note. Note that four categories
+# have no 0 (their lowest level is 5, or 10 for Policy), exactly as the guide
+# sets them.
 
+
+def phone_level_label(rubric_item: dict, value) -> str:
+    """'10 - Full', '5 - Partial', ... for a phone level; the bare number if unknown."""
+    level = (rubric_item.get("levels") or {}).get(value)
+    return f"{value} - {level[0]}" if level else str(value)
+
+
+# Short one-line summaries of the levels, used as tooltips.
 PHONE_RUBRIC_GUIDE = {
-    "opening": "Greeting and name given, reason for the call confirmed, identity checked before any account details are discussed or changed.",
-    "listening": "Lets the caller finish without interrupting, restates the issue accurately, asks clarifying questions, shows empathy where it fits.",
-    "call_control": "Clear, steady pace and confident tone; no long silences; proper hold etiquette (asks first, gives a time estimate, checks back in); warm transfers with context; steers the call back when it drifts.",
-    "policy": "Correct policy information, follows the right process, handles safety situations correctly (accidents, roadside issues, vehicle condition).",
-    "resolution": "Solves the issue or gives clear next steps with a timeframe, recaps before hanging up, confirms nothing else is needed.",
-    "documentation": "Post-call notes in Intercom/ZOMP are accurate and complete enough for the next agent to pick up without calling the customer back.",
+    r["key"]: " · ".join(phone_level_label(r, v) for v in sorted(r["options"], reverse=True)) for r in PHONE_RUBRIC
 }
 
 # Keys that only exist on the phone rubric. An audit whose saved scores contain
