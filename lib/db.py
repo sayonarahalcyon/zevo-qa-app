@@ -827,11 +827,18 @@ def save_calibration_score(session_id: str, evaluator: str, row: dict) -> str | 
     db = get_client()
     if not db:
         return "Database is not connected \u2014 check the Supabase URL/key in Secrets."
+    full = {**row, "session_id": session_id, "evaluator": evaluator, "submitted_at": datetime.now(timezone.utc).isoformat()}
     try:
-        db.table("calibration_scores").upsert(
-            {**row, "session_id": session_id, "evaluator": evaluator, "submitted_at": datetime.now(timezone.utc).isoformat()},
-            on_conflict="session_id,evaluator",
-        ).execute()
+        try:
+            db.table("calibration_scores").upsert(full, on_conflict="session_id,evaluator").execute()
+        except Exception as exc:
+            # "zomp_link" comes from sql/migrations/2026_11_12_calibration_zomp_link.sql.
+            # Until that has been run, still save the score, just without the link.
+            if "zomp_link" in full and "zomp_link" in str(exc):
+                full.pop("zomp_link")
+                db.table("calibration_scores").upsert(full, on_conflict="session_id,evaluator").execute()
+            else:
+                raise
         list_calibration_scores.clear()
         return None
     except Exception as e:
