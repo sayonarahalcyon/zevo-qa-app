@@ -217,3 +217,22 @@ create index if not exists idx_disputes_status on disputes (status);
 -- reviewer password gate in lib/auth.py). If you'd rather enforce reads/
 -- writes at the database level too, enable RLS and add policies here —
 -- left permissive by default so the app works out of the box.
+
+-- Autosaved audit drafts and "stay signed in" sessions
+-- (sql/migrations/2026_11_12_drafts_and_sessions.sql).
+create table if not exists audit_drafts (
+    ticket_id   text not null,
+    author      text not null,
+    data        jsonb not null default '{}'::jsonb,
+    updated_at  timestamptz not null default now(),
+    primary key (ticket_id, author)
+);
+
+create table if not exists app_sessions (
+    token_hash  text primary key,
+    kind        text not null,          -- 'reviewer' or 'evaluator'
+    ident       text not null,          -- reviewer name, or evaluators.id
+    name        text not null,
+    created_at  timestamptz not null default now(),
+    expires_at  timestamptz not null
+);
