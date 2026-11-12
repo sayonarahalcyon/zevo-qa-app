@@ -142,6 +142,23 @@ def get_conversation(conversation_id: str) -> dict:
 
 
 @st.cache_data(ttl=300, show_spinner=False)
+def list_contact_notes(contact_id: str, max_pages: int = 5) -> list[dict]:
+    """The "User notes" on a contact (the notes in the Intercom sidebar, not
+    internal notes inside a conversation), newest first. Each note is
+    {id, created_at, body (HTML), author {id, name, ...}}."""
+    notes, page = [], 1
+    while page <= max_pages:
+        payload = _request("GET", f"/contacts/{contact_id}/notes", params={"per_page": 50, "page": page})
+        notes.extend(payload.get("data") or [])
+        pages = payload.get("pages") or {}
+        if not pages.get("next") or page >= int(pages.get("total_pages") or page):
+            break
+        page += 1
+    notes.sort(key=lambda n: n.get("created_at") or 0, reverse=True)
+    return notes
+
+
+@st.cache_data(ttl=300, show_spinner=False)
 def list_admins() -> list[dict]:
     """Optional roster helper (the app primarily learns agents organically
     from conversations as they're opened, per the original design)."""
