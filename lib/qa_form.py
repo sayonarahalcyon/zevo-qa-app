@@ -22,6 +22,7 @@ from lib.constants import (
     CHANNEL_OPTIONS,
     CONCERN_TYPES,
     RENTER_HOST_OPTIONS,
+    TICKET_SUBMITTED_BY_OPTIONS,
     compute_result,
     compute_total,
     critical_errors_for,
@@ -162,6 +163,8 @@ def _render_breakdown(qa: dict) -> None:
             extra.append("Concern: " + ", ".join(qa["concern_types"]))
         if qa.get("renter_host"):
             extra.append(f"Renter/Host: {qa['renter_host']}")
+        if qa.get("ticket_submitted_by"):
+            extra.append(f"Submitted by: {qa['ticket_submitted_by']}")
         if extra:
             st.caption(" · ".join(extra))
         if qa.get("zomp_link"):
@@ -279,6 +282,21 @@ def _render_form(
             key=f"rh_{ticket_id}",
             disabled=not signed_in,
         )
+    ticket_submitted_by = None
+    if channel == "Phone":
+        sb_col, _ = st.columns(2)
+        with sb_col:
+            ticket_submitted_by = st.selectbox(
+                "Ticket submitted by",
+                TICKET_SUBMITTED_BY_OPTIONS,
+                index=_safe_index(TICKET_SUBMITTED_BY_OPTIONS, seed.get("ticket_submitted_by"))
+                if seed.get("ticket_submitted_by") in TICKET_SUBMITTED_BY_OPTIONS
+                else None,
+                placeholder="Sales or T1",
+                key=f"submitted_by_{ticket_id}",
+                help="Which team submitted this phone ticket for evaluation. Required.",
+                disabled=not signed_in,
+            )
 
     concern_types = st.multiselect(
         "Concern Type (select all that apply)",
@@ -397,6 +415,7 @@ def _render_form(
             "ticket_link": ticket_link,
             "zomp_link": zomp_link,
             "renter_host": renter_host,
+            "ticket_submitted_by": ticket_submitted_by,
             "concern_types": concern_types,
             "scores": scores,
             "remarks": remarks,
@@ -421,8 +440,14 @@ def _render_form(
             help="Auto-checked when this ticket came from 'Manually log a ticket' on Weekly QA Batch — toggle any time. Shows as a tag in the QA Log so it's easy to tell apart from the random pull.",
         )
     else:
-        # Phone evaluators don't set these; an edit keeps whatever a reviewer set.
-        is_test = bool((existing or {}).get("is_test", False))
+        # Phone evaluators can mark their own audits as tests (Weng,
+        # 2026-11-12), but not as escalated; an edit keeps whatever a reviewer set.
+        is_test = st.checkbox(
+            "🧪 Mark as a test audit",
+            value=bool((existing or {}).get("is_test", False)),
+            key=f"is_test_{ticket_id}",
+            help="Saved like any other audit, but it doesn't count toward any numbers and never shows on the agent's dashboard.",
+        )
         is_escalated = bool((existing or {}).get("is_escalated", default_escalated))
 
     # A score only gets reopened after being saved for one of two reasons in
@@ -459,6 +484,9 @@ def _render_form(
             return
         if channel == "Phone" and phone_rubric_ui.missing_levels(scores):
             st.error("Pick a level for every category: " + ", ".join(phone_rubric_ui.missing_levels(scores)) + ".")
+            return
+        if channel == "Phone" and not ticket_submitted_by:
+            st.error("Choose who submitted the ticket: Sales or T1.")
             return
         if existing and not edit_reason:
             st.error("Choose why this score is being edited.")
@@ -519,6 +547,7 @@ def _render_form(
             # Only phone audits carry this field, so a chat save never touches
             # the column (and keeps working before the SQL migration is run).
             entry["recording_link"] = recording_link.strip()
+            entry["ticket_submitted_by"] = ticket_submitted_by
         try:
             db.save_qa_entry(ticket_id, entry)
             db.delete_audit_draft(ticket_id, author)
