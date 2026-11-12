@@ -158,7 +158,7 @@ def _comparison(session: dict, scores: dict) -> None:
     else:
         st.caption("No critical errors flagged by anyone.")
 
-    with st.expander("Remarks and comments"):
+    with st.expander("Remarks, comments and ZOMP links"):
         for p in people:
             s = scores[p]
             st.markdown(f"**{p}** · submitted {_fmt(s.get('submitted_at'))}")
@@ -166,6 +166,8 @@ def _comparison(session: dict, scores: dict) -> None:
             lines = [f"- {r['name']}: {rem[r['key']]}" for r in RUBRIC if rem.get(r["key"])]
             if s.get("overall_comments"):
                 lines.append(f"- Overall: {s['overall_comments']}")
+            if s.get("zomp_link"):
+                lines.append(f"- ZOMP: [{s['zomp_link']}]({s['zomp_link']})")
             st.markdown("\n".join(lines) if lines else "_No remarks._")
 
 
@@ -193,6 +195,10 @@ def _score_form(session: dict, existing: dict | None, locked: bool) -> None:
             disabled=locked, label_visibility="collapsed", placeholder="Remarks (optional)",
         )
     overall = st.text_area("Overall comments", value=(existing or {}).get("overall_comments") or "", key=f"cal_overall_{sid}", disabled=locked)
+    zomp_link = st.text_input(
+        "ZOMP Link", value=(existing or {}).get("zomp_link") or "", key=f"cal_zomp_{sid}", disabled=locked,
+        placeholder="Paste the ZOMP link you checked (optional)",
+    )
     st.markdown('**Critical errors** (any "Yes" = automatic FAIL)')
     crit = {}
     per_row = min(len(CRITICAL), 4)
@@ -219,6 +225,7 @@ def _score_form(session: dict, existing: dict | None, locked: bool) -> None:
                 "remarks": remarks,
                 "critical_errors": crit,
                 "overall_comments": overall,
+                "zomp_link": zomp_link.strip(),
                 "total_score": total,
                 "result": result,
             },
