@@ -42,6 +42,15 @@ is_evaluator = evaluator_auth.is_signed_in()
 me = auth.current_reviewer() or evaluator_auth.current_name()
 is_queue_admin = auth.current_reviewer() == QUEUE_ADMIN
 
+# A phone evaluator should never see the full page list. On the rare cold
+# start where Streamlit runs this file directly (app.py didn't run), the
+# sidebar would list every page, so hide it for them.
+if is_evaluator and not auth.is_signed_in() and not st.session_state.get("app_entry_ran"):
+    st.markdown(
+        "<style>[data-testid='stSidebar'], [data-testid='stSidebarCollapsedControl'] {display: none;}</style>",
+        unsafe_allow_html=True,
+    )
+
 ui.page_heading("Phone Queue")
 
 if not (is_reviewer or is_evaluator):
