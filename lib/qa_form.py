@@ -17,7 +17,7 @@ from datetime import date, datetime
 
 import streamlit as st
 
-from lib import auth, db, evaluator_auth, sheets_backup
+from lib import auth, db, evaluator_auth, phone_rubric_ui, sheets_backup
 from lib.constants import (
     CHANNEL_OPTIONS,
     CONCERN_TYPES,
@@ -235,6 +235,25 @@ def _render_form(
     existing_scores = (existing or {}).get("scores") or {}
     existing_remarks = (existing or {}).get("remarks") or {}
     for r in rubric:
+        if channel == "Phone":
+            # Phone: the guide's fixed levels, each with its description, and the
+            # category's Critical Note; remarks go underneath.
+            st.markdown(f"**{r['name']}** ({r['max']} points)")
+            scores[r["key"]] = phone_rubric_ui.level_picker(
+                r,
+                key=f"score_{channel}_{r['key']}_{ticket_id}",
+                current=existing_scores.get(r["key"]),
+                disabled=not signed_in,
+            )
+            remarks[r["key"]] = st.text_input(
+                f"Remarks — {r['name']}",
+                value=existing_remarks.get(r["key"], ""),
+                key=f"remark_{channel}_{r['key']}_{ticket_id}",
+                disabled=not signed_in,
+                label_visibility="collapsed",
+                placeholder="Remarks (optional)",
+            )
+            continue
         rc1, rc2 = st.columns([1, 2])
         with rc1:
             st.caption(f"{r['name']} (max {r['max']})")
@@ -348,6 +367,9 @@ def _render_form(
     if st.button("Save changes" if existing else "Submit audit", key=f"submit_{ticket_id}", type="primary"):
         if not agent_name.strip():
             st.error("Agent Name is required.")
+            return
+        if channel == "Phone" and phone_rubric_ui.missing_levels(scores):
+            st.error("Pick a level for every category: " + ", ".join(phone_rubric_ui.missing_levels(scores)) + ".")
             return
         if existing and edit_reason.startswith("Dispute") and not dispute_reason.strip():
             st.error("Dispute reason is required when editing a score because of a dispute.")
