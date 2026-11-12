@@ -6,9 +6,9 @@ conversation id, or when the ticket's own agent wrote it while the ticket was
 being handled (from 1 hour before it opened to 2 days after it was last
 updated).
 
-A user's notes cover every booking and ticket they have ever had, so phone
-evaluators (Alrose, no Intercom access) see only this ticket's notes; Weng,
-Erwin and Kristine can also expand the rest.
+This ticket's notes are shown first; the guest's other notes (every other
+booking and ticket) are in a collapsed list below. Everyone who can open the
+ticket sees both, phone evaluators included (Weng, 2026-11-12).
 """
 
 from __future__ import annotations
@@ -86,7 +86,7 @@ def render_user_notes(convo: dict, evaluator_mode: bool = False) -> None:
             _note_box(n)
     else:
         st.info("No user notes for this ticket. The agent left no note on the guest's profile linking to it.")
-    if other and not evaluator_mode:
+    if other:
         with st.expander(f"The guest's other user notes ({len(other)})"):
             for n in other:
                 _note_box(n)
