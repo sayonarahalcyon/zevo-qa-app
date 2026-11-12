@@ -24,6 +24,7 @@ calibration = st.Page("pages/8_Calibration.py", title="Calibration", icon="🎯"
 
 TEAM_LEAD_LINK_PATH = "Team_Lead_Dashboard"  # the dashboard's own address, shared with team leads
 AGENT_LINK_PATH = "My_Dashboard"  # My Dashboard's own address, shared with agents
+EVALUATOR_LINK_PATH = "Phone_Evaluator"  # phone evaluators' sign-in page, shared with them
 
 
 def opened_from_link(path_name: str) -> bool:
@@ -73,10 +74,29 @@ if auth.is_signed_in():
 elif evaluator_auth.is_signed_in():
     # A phone evaluator (e.g. the third-party evaluator) sees only the Phone
     # Queue and Calibration; nothing else is registered for them.
+    evaluator_queue = st.Page("pages/7_Phone_Queue.py", title="Phone Queue", icon="📞", default=True)
+    pages = [evaluator_queue, st.Page("pages/8_Calibration.py", title="Calibration", icon="🎯")]
+    if opened_from_link(EVALUATOR_LINK_PATH):
+        # They signed in on their own sign-in page; its address now forwards to
+        # the Phone Queue (hidden from the sidebar).
+        def forward_to_queue():
+            st.switch_page(evaluator_queue)
+
+        pages.append(
+            st.Page(forward_to_queue, title="Phone Queue", url_path=EVALUATOR_LINK_PATH, visibility="hidden")
+        )
+elif opened_from_link(EVALUATOR_LINK_PATH):
+    # The phone evaluators' own link: only their sign-in page, no sidebar.
     pages = [
-        st.Page("pages/7_Phone_Queue.py", title="Phone Queue", icon="📞", default=True),
-        st.Page("pages/8_Calibration.py", title="Calibration", icon="🎯"),
+        st.Page(
+            "pages/9_Phone_Evaluator_Sign_In.py",
+            title="Phone Evaluator Sign-in",
+            icon="📞",
+            url_path=EVALUATOR_LINK_PATH,
+            default=True,
+        )
     ]
+    kwargs = {"position": "hidden"}
 elif opened_from_link(TEAM_LEAD_LINK_PATH):
     pages = dashboard_only_pages(
         "pages/6_Team_Lead_Dashboard.py", "Team Lead Dashboard", "🧑‍💼", TEAM_LEAD_LINK_PATH
