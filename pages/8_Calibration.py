@@ -50,6 +50,15 @@ is_admin = auth.current_reviewer() == CALIBRATION_ADMIN
 RUBRIC = rubric_for("Phone")
 CRITICAL = critical_errors_for("Phone")
 
+# A phone evaluator should never see the full page list. On the rare cold
+# start where Streamlit runs this file directly (app.py didn't run), the
+# sidebar would list every page, so hide it for them.
+if is_evaluator and not auth.is_signed_in() and not st.session_state.get("app_entry_ran"):
+    st.markdown(
+        "<style>[data-testid='stSidebar'], [data-testid='stSidebarCollapsedControl'] {display: none;}</style>",
+        unsafe_allow_html=True,
+    )
+
 ui.page_heading("Calibration")
 
 if not (is_reviewer or is_evaluator):
