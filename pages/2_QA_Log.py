@@ -92,6 +92,8 @@ if ss.get("log_open_audit_key"):
     m3.markdown(f"**Concern type:** {', '.join(entry.get('concern_types') or []) or '—'}")
     if entry.get("recording_link"):
         st.markdown(f"**Call recording:** [{entry['recording_link']}]({entry['recording_link']})")
+    if entry.get("ticket_submitted_by"):
+        st.markdown(f"**Ticket submitted by:** {entry['ticket_submitted_by']}")
     if entry.get("zomp_link"):
         st.markdown(f"**ZOMP:** [{entry['zomp_link']}]({entry['zomp_link']})")
 
