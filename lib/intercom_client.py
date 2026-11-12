@@ -142,6 +142,11 @@ def get_conversation(conversation_id: str) -> dict:
 
 
 @st.cache_data(ttl=300, show_spinner=False)
+def get_contact(contact_id: str) -> dict:
+    return _request("GET", f"/contacts/{contact_id}")
+
+
+@st.cache_data(ttl=300, show_spinner=False)
 def list_contact_notes(contact_id: str, max_pages: int = 5) -> list[dict]:
     """The "User notes" on a contact (the notes in the Intercom sidebar, not
     internal notes inside a conversation), newest first. Each note is
